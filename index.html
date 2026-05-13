@@ -43,13 +43,16 @@
         
         <div class="flex flex-col md:flex-row gap-6">
             <button id="btn_host" class="bg-blue-600 hover:bg-blue-500 px-8 py-6 rounded-2xl font-bold text-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition transform hover:scale-105">
-                💻 PLAY ON PC<br><span class="text-sm font-normal opacity-75">(Acts as Screen)</span>
+                💻 AR HOST ON PC<br><span class="text-sm font-normal opacity-75">(Acts as Screen)</span>
             </button>
             <button id="btn_join" class="bg-emerald-600 hover:bg-emerald-500 px-8 py-6 rounded-2xl font-bold text-xl shadow-[0_0_20px_rgba(16,185,129,0.4)] transition transform hover:scale-105">
                 📱 USE PHONE<br><span class="text-sm font-normal opacity-75">(Acts as Camera)</span>
             </button>
         </div>
-        <button id="btn_solo" class="mt-8 text-sm text-slate-400 hover:text-white underline">Just use PC Webcam instead</button>
+        <button id="btn_fps" class="mt-6 bg-slate-700 hover:bg-slate-600 px-8 py-4 rounded-2xl font-bold text-xl shadow-[0_0_20px_rgba(255,255,255,0.1)] transition transform hover:scale-105">
+            🎯 FIRST-PERSON RANGE<br><span class="text-sm font-normal opacity-75">(Aim with your REAL arms!)</span>
+        </button>
+        <button id="btn_solo" class="mt-6 text-sm text-slate-400 hover:text-white underline">Just use PC Webcam instead</button>
     </div>
 
     <!-- UI Overlay: PC Host Screen -->
@@ -73,12 +76,13 @@
     </div>
 
     <!-- HUD (In Game) -->
+    <div id="crosshair" class="absolute top-1/2 left-1/2 w-2 h-2 bg-white rounded-full pointer-events-none hidden z-40 transform -translate-x-1/2 -translate-y-1/2 shadow-[0_0_5px_rgba(0,0,0,1)]"></div>
     <div id="ui_hud" class="absolute top-0 left-0 w-full p-6 pointer-events-none hidden z-30 flex justify-between">
         <div class="bg-black/40 backdrop-blur px-6 py-2 rounded-xl border border-white/10 text-3xl font-black text-cyan-400 drop-shadow-md">
             SCORE: <span id="score_val" class="text-white">0</span>
         </div>
         <div class="bg-black/40 backdrop-blur px-6 py-2 rounded-xl border border-white/10 text-sm text-right max-w-xs">
-            Reach out, then <b>MAKE A FIST</b> to grab the pistol.<br>Open your hand to drop it.
+            You are holding a pistol.<br><b>POINT</b> your arm to aim.<br><b>SQUEEZE</b> your hand to shoot!
         </div>
     </div>
 
@@ -86,8 +90,9 @@
     // ==========================================
     // GAME STATE & CONSTANTS
     // ==========================================
-    const STATE = { mode: null, score: 0, isGrabbing: false, activeHand: null };
+    const STATE = { mode: null, score: 0, isGrabbing: false, activeHand: null, isFPS: false };
     let peer = null, mediaStream = null, pose = null;
+    let pitch = 0, yaw = 0;
     
     // Physics & 3D vars
     let world, scene, camera, renderer;
@@ -109,7 +114,7 @@
         leftHip: null, rightHip: null,
         leftKnee: null, rightKnee: null,
         leftAnkle: null, rightAnkle: null,
-        leftGrab: false, rightGrab: false,
+        leftShoot: false, rightShoot: false,
         visible: false
     };
 
@@ -133,6 +138,29 @@
         uiJoin.classList.remove('hidden');
     });
     document.getElementById('btn_solo').addEventListener('click', () => startPCWebcam());
+    document.getElementById('btn_fps').addEventListener('click', () => startFPSMode());
+
+    function startFPSMode() {
+        STATE.isFPS = true;
+        uiMain.classList.add('hidden');
+        uiHud.classList.remove('hidden');
+        document.getElementById('crosshair').classList.remove('hidden');
+        canvas.classList.remove('hidden');
+        
+        document.querySelector('#ui_hud div:nth-child(2)').innerHTML = `Target Range Mode.<br><b>POINT</b> your arm to aim the laser.<br><b>SQUEEZE</b> your hand to shoot!`;
+        
+        // Start engine with PC webcam instantly for FPS if not joined
+        if (!mediaStream && !peer) {
+            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }})
+            .then(stream => {
+                vidRecv.srcObject = stream;
+                startEngine(vidRecv);
+            }).catch(() => alert("No webcam found."));
+        } else {
+            // Already connected via phone
+            startEngine(vidRecv);
+        }
+    }
 
     // --- PC HOST MODE ---
     function initHost() {
@@ -238,11 +266,12 @@
                 const lm = results.poseLandmarks;
                 
                 // Map 2D landmarks to 3D space. Scaled up to fit a full body.
+                // INCREASED Z-DEPTH MULTIPLIER to make pushing arms forward more realistic
                 const map3D = (idx, yOffset = 0) => {
                     return new THREE.Vector3(
                         -(lm[idx].x - 0.5) * 45, // Mirrored X, scaled wider
                         -(lm[idx].y - 0.5) * 40 + 20 + yOffset, // Inverted Y, scaled for full body
-                        (lm[idx].z || 0) * -20 // Z depth
+                        (lm[idx].z || 0) * -45 // Enhanced Z depth for better aiming
                     );
                 };
 
@@ -262,12 +291,12 @@
                 POSE3D.rightAnkle = map3D(27);
                 POSE3D.leftAnkle = map3D(28);
 
-                // Fist Detection (Distance between wrist and index knuckle)
+                // Shoot Detection (Distance between wrist and index knuckle)
                 const getDist2D = (idx1, idx2) => Math.hypot(lm[idx1].x - lm[idx2].x, lm[idx1].y - lm[idx2].y);
                 
-                // Hand closes = landmarks move closer together
-                POSE3D.rightGrab = getDist2D(15, 19) < 0.05;
-                POSE3D.leftGrab = getDist2D(16, 20) < 0.05;
+                // Finger curls/holds down = landmarks move closer together to form a fist/trigger pull
+                POSE3D.rightShoot = getDist2D(15, 19) < 0.05;
+                POSE3D.leftShoot = getDist2D(16, 20) < 0.05;
 
             } else {
                 POSE3D.visible = false;
@@ -287,7 +316,9 @@
         requestAnimationFrame(renderLoop);
         
         // Spawn boxes
-        setInterval(spawnBox, 1500);
+        setInterval(() => {
+            if (!STATE.isFPS) spawnTargets(1);
+        }, 1500);
     }
 
 
@@ -322,22 +353,22 @@
         
         world.addBody(handLeftBody); world.addBody(handRightBody); world.addBody(headBody);
 
-        // The Pistol (Dynamic Body)
+        // The Pistol (Kinematic Body so we can aim it directly with the arm vector)
         const pistolShape = new CANNON.Box(new CANNON.Vec3(0.5, 1.5, 2));
-        pistolBody = new CANNON.Body({ mass: 2, material: physicsMat });
+        pistolBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: physicsMat });
         pistolBody.addShape(pistolShape);
-        pistolBody.position.set(0, 15, 0); // Start floating higher up to be at chest level
-        pistolBody.linearDamping = 0.1;
-        pistolBody.angularDamping = 0.5;
+        pistolBody.position.set(0, 0, 0);
         world.addBody(pistolBody);
 
+        STATE.isGrabbing = true;
+        STATE.activeHand = 'right';
 
         // --- 2. Graphics Setup (Three.js) ---
         scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x020617, 0.015);
 
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 20, 45); // Moved back and up to see the full body
+        camera.position.set(0, 20, 45); 
         camera.lookAt(0, 15, 0);
 
         renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
@@ -351,85 +382,105 @@
         });
 
         // Lights
-        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
         scene.add(ambient);
-        const spotLight = new THREE.SpotLight(0x06b6d4, 1.5); // Cyan light
-        spotLight.position.set(0, 40, 20);
+        const spotLight = new THREE.SpotLight(0x06b6d4, 2.0); // Cyan light
+        spotLight.position.set(0, 50, 20);
         spotLight.target.position.set(0, 0, 0);
         spotLight.castShadow = true;
         scene.add(spotLight);
         scene.add(spotLight.target);
+        
+        // Expose spotlight globally for muzzle flashes
+        window.spotLight = spotLight; 
 
         // Graphics: Environment Grid
-        const gridHelper = new THREE.GridHelper(100, 50, 0x06b6d4, 0x1e293b);
+        const gridHelper = new THREE.GridHelper(200, 100, 0x06b6d4, 0x0f172a);
         gridHelper.position.y = 0;
         scene.add(gridHelper);
 
-        // Graphics: Player Hands/Head/Arms/Body
-        const handGeo = new THREE.SphereGeometry(1.5, 32, 32);
-        
-        // Separate materials so we can change hand color when grabbing
-        const handLeftMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9, emissiveIntensity: 0.5, transparent: true, opacity: 0.8 });
-        const handRightMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9, emissiveIntensity: 0.5, transparent: true, opacity: 0.8 });
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9, emissiveIntensity: 0.5, transparent: true, opacity: 0.8 });
+        // ==========================================
+        // REALISTIC AVATAR MATERIALS & MESHES
+        // ==========================================
+        // High-end tactical armor PBR material
+        const armorMat = new THREE.MeshPhysicalMaterial({ 
+            color: 0x0f172a, metalness: 0.8, roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.2 
+        });
+        const glowMat = new THREE.MeshStandardMaterial({ 
+            color: 0x0ea5e9, emissive: 0x0ea5e9, emissiveIntensity: 2.0 
+        });
 
-        handLeftMesh = new THREE.Mesh(handGeo, handLeftMat); scene.add(handLeftMesh);
-        handRightMesh = new THREE.Mesh(handGeo, handRightMat); scene.add(handRightMesh);
+        // Hands
+        handLeftMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), armorMat); scene.add(handLeftMesh);
+        handRightMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), armorMat); scene.add(handRightMesh);
         
-        const headGeo = new THREE.SphereGeometry(2.5, 32, 32);
-        headMesh = new THREE.Mesh(headGeo, bodyMat); scene.add(headMesh);
+        // Realistic Helmet Head
+        headMesh = new THREE.Group();
+        const helmet = new THREE.Mesh(new THREE.BoxGeometry(4, 5, 4.5), armorMat);
+        // Visor
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.5, 4.6), glowMat);
+        visor.position.set(0, 0.5, 0);
+        helmet.add(visor);
+        headMesh.add(helmet);
+        scene.add(headMesh);
 
-        // Body Bones
-        const createBone = () => {
-            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 1), bodyMat);
+        // Thick, Exoskeleton-style tapered bones
+        const createExoBone = (rTop, rBot) => {
+            const mesh = new THREE.Group();
+            const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, 1, 16), armorMat);
+            cylinder.castShadow = true;
+            mesh.add(cylinder);
+            
+            // Add glowing rings to joints for sci-fi look
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(rTop + 0.1, 0.1, 8, 16), glowMat);
+            ring.rotation.x = Math.PI/2;
+            ring.position.y = 0.4;
+            mesh.add(ring);
+            
             scene.add(mesh);
             return mesh;
         };
+
         bodyBones = {
-            // Arms
-            leftUpper: createBone(), leftLower: createBone(),
-            rightUpper: createBone(), rightLower: createBone(),
-            // Torso
-            torsoTop: createBone(), torsoBottom: createBone(),
-            torsoLeft: createBone(), torsoRight: createBone(),
-            // Legs
-            leftUpperLeg: createBone(), leftLowerLeg: createBone(),
-            rightUpperLeg: createBone(), rightLowerLeg: createBone()
+            // Arms (Tapered down to wrist)
+            leftUpper: createExoBone(1.4, 1.0), leftLower: createExoBone(1.0, 0.8),
+            rightUpper: createExoBone(1.4, 1.0), rightLower: createExoBone(1.0, 0.8),
+            // Torso Frame
+            torsoTop: createExoBone(2.5, 2.5), torsoBottom: createExoBone(2.0, 2.0),
+            torsoLeft: createExoBone(1.5, 1.5), torsoRight: createExoBone(1.5, 1.5),
+            // Legs (Thick thighs tapering to ankles)
+            leftUpperLeg: createExoBone(1.8, 1.3), leftLowerLeg: createExoBone(1.3, 1.0),
+            rightUpperLeg: createExoBone(1.8, 1.3), rightLowerLeg: createExoBone(1.3, 1.0)
         };
 
-        // Graphics: Pistol
+        // Graphics: Realistic Pistol
         pistolMesh = new THREE.Group();
-        const gunMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.4, metalness: 0.9 });
-        const highlightMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, emissive: 0x0ea5e9, emissiveIntensity: 0.8 });
+        const gunMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.9 });
         
         // Barrel
-        const barrelGeo = new THREE.BoxGeometry(0.8, 1.2, 4);
-        const barrel = new THREE.Mesh(barrelGeo, gunMat);
+        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 4), gunMat);
         barrel.position.set(0, 0.8, 1);
         barrel.castShadow = true;
         pistolMesh.add(barrel);
         
         // Grip
-        const gripGeo = new THREE.BoxGeometry(0.9, 2.5, 1.2);
-        const grip = new THREE.Mesh(gripGeo, gunMat);
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.5, 1.2), gunMat);
         grip.position.set(0, -0.5, -0.5);
         grip.rotation.x = -Math.PI / 10;
         pistolMesh.add(grip);
 
-        // Glow strips
-        const strip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.2, 3), highlightMat);
-        strip.position.set(0, 0.8, 1);
-        pistolMesh.add(strip);
+        // Laser Sight (Crucial for aiming with real arms)
+        const laserMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.7 });
+        const laser = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 200), laserMat);
+        laser.position.set(0, 0.8, 101); // Positioned protruding out of the barrel
+        laser.rotation.x = Math.PI / 2; // Align with Z axis
+        pistolMesh.add(laser);
 
         scene.add(pistolMesh);
 
         // Collision Event detection (CannonJS)
         pistolBody.addEventListener("collide", (e) => {
-            const contactNormal = e.contact.ni;
-            // Calculate relative velocity along the normal
             const relVel = e.contact.getImpactVelocityAlongNormal();
-            
-            // If the pistol hits a box hard enough (Melee Smash)
             if(Math.abs(relVel) > 15 && e.body.userData && e.body.userData.isBox) {
                 breakBox(e.body.userData.id);
             }
@@ -438,43 +489,52 @@
 
     // --- Game Logic Functions ---
 
-    function spawnBox() {
-        const size = 3 + Math.random() * 2;
-        const id = Math.random().toString(36).substr(2, 9);
-        
-        // Physics
-        const shape = new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2));
-        const body = new CANNON.Body({ mass: size });
-        body.addShape(shape);
-        // Ensure boxes fall roughly on the same Z plane as the bat (z=0) so user doesn't miss
-        body.position.set((Math.random() - 0.5) * 20, 40, (Math.random() - 0.5) * 5); 
-        body.userData = { isBox: true, id: id };
-        
-        // Listen for bullets hitting the box
-        body.addEventListener("collide", (e) => {
-            if(e.body.userData && e.body.userData.isBullet) {
-                breakBox(id);
+    function spawnTargets(count) {
+        for(let i=0; i<count; i++) {
+            const size = 3 + Math.random() * 2;
+            const id = Math.random().toString(36).substr(2, 9);
+            
+            // Physics
+            const shape = new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2));
+            const body = new CANNON.Body({ mass: STATE.isFPS ? 0 : size }); 
+            body.addShape(shape);
+            
+            if (STATE.isFPS) {
+                // Static targets deep down the range (-Z axis)
+                body.position.set((Math.random() - 0.5) * 60, 2 + Math.random() * 20, -30 - Math.random() * 80); 
+            } else {
+                // Falling boxes for AR mode
+                body.position.set((Math.random() - 0.5) * 20, 40, (Math.random() - 0.5) * 5); 
             }
-        });
-        
-        world.addBody(body);
+            
+            body.userData = { isBox: true, id: id };
+            
+            // Listen for bullets hitting the box
+            body.addEventListener("collide", (e) => {
+                if(e.body.userData && e.body.userData.isBullet) {
+                    breakBox(id);
+                }
+            });
+            
+            world.addBody(body);
 
-        // Graphics
-        const geo = new THREE.BoxGeometry(size, size, size);
-        const mat = new THREE.MeshStandardMaterial({ 
-            color: 0xf59e0b, // Amber / Wood
-            roughness: 0.8
-        });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.castShadow = true; mesh.receiveShadow = true;
-        scene.add(mesh);
+            // Graphics
+            const geo = new THREE.BoxGeometry(size, size, size);
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: STATE.isFPS ? 0xe53e3e : 0xf59e0b, // Red targets in FPS, Amber boxes in AR
+                roughness: 0.8
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.castShadow = true; mesh.receiveShadow = true;
+            scene.add(mesh);
 
-        // Wireframe overlay
-        const edges = new THREE.EdgesGeometry(geo);
-        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x78350f }));
-        mesh.add(line);
+            // Wireframe overlay
+            const edges = new THREE.EdgesGeometry(geo);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x78350f }));
+            mesh.add(line);
 
-        boxes.push({ id, body, mesh, size });
+            boxes.push({ id, body, mesh, size });
+        }
     }
 
     function createExplosion(x,y,z, colorHex) {
@@ -497,7 +557,7 @@
         const index = boxes.findIndex(b => b.id === id);
         if (index > -1) {
             const box = boxes[index];
-            createExplosion(box.body.position.x, box.body.position.y, box.body.position.z, 0xf59e0b);
+            createExplosion(box.body.position.x, box.body.position.y, box.body.position.z, STATE.isFPS ? 0xe53e3e : 0xf59e0b);
             
             world.removeBody(box.body);
             scene.remove(box.mesh);
@@ -507,6 +567,11 @@
             scoreVal.innerText = STATE.score;
             scoreVal.parentElement.classList.add('scale-125', 'text-yellow-300');
             setTimeout(() => scoreVal.parentElement.classList.remove('scale-125', 'text-yellow-300'), 150);
+            
+            // Spawn more targets in FPS mode if we run low
+            if (STATE.isFPS && boxes.length < 5) {
+                spawnTargets(10);
+            }
         }
     }
 
@@ -515,12 +580,12 @@
         const tipLocal = new CANNON.Vec3(0, 1.5, 3.5);
         const tipWorld = pistolBody.pointToWorldFrame(tipLocal);
         
-        // Calculate forward velocity based on gun angle
-        const forwardLocal = new CANNON.Vec3(0, 0, 80);
+        // Calculate forward velocity based on gun angle (Z axis is forward in our setup)
+        const forwardLocal = new CANNON.Vec3(0, 0, 150);
         const velWorld = pistolBody.vectorToWorldFrame(forwardLocal);
         
         const shape = new CANNON.Sphere(0.4);
-        const body = new CANNON.Body({ mass: 0.5 }); // Heavy bullets to smash things!
+        const body = new CANNON.Body({ mass: 0.5 }); 
         body.addShape(shape);
         body.position.copy(tipWorld);
         body.velocity.copy(velWorld);
@@ -535,9 +600,15 @@
         
         bullets.push({ body, mesh, life: 2.0 });
         
-        // Apply recoil back to the pistol body
-        const recoil = pistolBody.vectorToWorldFrame(new CANNON.Vec3(0, 5, -10));
-        pistolBody.applyImpulse(recoil, pistolBody.position);
+        // Visual flash
+        if(window.spotLight) {
+            window.spotLight.color.setHex(0xffffff);
+            window.spotLight.intensity = 5.0;
+            setTimeout(() => { 
+                window.spotLight.color.setHex(0x06b6d4); 
+                window.spotLight.intensity = 2.0; 
+            }, 50);
+        }
     }
 
     // --- Main Render & Physics Loop ---
@@ -552,12 +623,7 @@
 
         // 2. Update Kinematic Player Bodies from AI
         if (POSE3D.visible) {
-            // Visual feedback for grabbing (Turn hands Red)
-            handLeftMesh.material.color.setHex(POSE3D.leftGrab ? 0xf87171 : 0x38bdf8);
-            handLeftMesh.material.emissive.setHex(POSE3D.leftGrab ? 0xef4444 : 0x0ea5e9);
-            handRightMesh.material.color.setHex(POSE3D.rightGrab ? 0xf87171 : 0x38bdf8);
-            handRightMesh.material.emissive.setHex(POSE3D.rightGrab ? 0xef4444 : 0x0ea5e9);
-
+            
             // Smoothly move physics bodies towards target (Kinematic velocity approach)
             const approach = (body, target) => {
                 const dx = target.x - body.position.x;
@@ -574,7 +640,10 @@
             const updateBone = (mesh, p1, p2) => {
                 if(!p1 || !p2) return;
                 const distance = p1.distanceTo(p2);
-                mesh.scale.set(1, distance, 1);
+                
+                // For Groups (our exoskeleton meshes), we need to scale the cylinder inside
+                mesh.children[0].scale.set(1, distance, 1);
+                
                 mesh.position.copy(p1).lerp(p2, 0.5);
                 mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p2.clone().sub(p1).normalize());
             };
@@ -597,35 +666,31 @@
             updateBone(bodyBones.rightUpperLeg, POSE3D.rightHip, POSE3D.rightKnee);
             updateBone(bodyBones.rightLowerLeg, POSE3D.rightKnee, POSE3D.rightAnkle);
 
-            // Pistol Grabbing Logic (Requires Fist)
-            if (!STATE.isGrabbing) {
-                const distL = handLeftBody.position.distanceTo(pistolBody.position);
-                const distR = handRightBody.position.distanceTo(pistolBody.position);
-                
-                let grabBody = null;
-                if (distL < 4 && POSE3D.leftGrab) grabBody = handLeftBody;
-                else if (distR < 4 && POSE3D.rightGrab) grabBody = handRightBody;
+            // --- PISTOL AIMING LOGIC ---
+            // Pistol snaps to hand position
+            pistolBody.position.copy(handRightBody.position);
+            
+            // Calculate vector from elbow to wrist to get the direction the arm is pointing
+            const aimDir = new THREE.Vector3().subVectors(POSE3D.right, POSE3D.rightElbow).normalize();
+            
+            // Only rotate if we have a valid vector
+            if (aimDir.lengthSq() > 0.01) {
+                // The gun barrel faces +Z locally. Rotate gun so +Z matches the arm's aim vector
+                const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), aimDir);
+                pistolBody.quaternion.copy(targetQuat);
+            }
 
-                if (grabBody) {
-                    STATE.isGrabbing = true;
-                    STATE.activeHand = grabBody === handLeftBody ? 'left' : 'right';
-                    // Create constraint to hold pistol by the grip
-                    pistolConstraint = new CANNON.PointToPointConstraint(
-                        grabBody, new CANNON.Vec3(0,0,0),
-                        pistolBody, new CANNON.Vec3(0, -1, -0.5) 
-                    );
-                    world.addConstraint(pistolConstraint);
-                }
-            } else {
-                // Check if user opened their hand to DROP the pistol
-                if ((STATE.activeHand === 'left' && !POSE3D.leftGrab) || 
-                    (STATE.activeHand === 'right' && !POSE3D.rightGrab)) {
-                    world.removeConstraint(pistolConstraint);
-                    STATE.isGrabbing = false;
-                    STATE.activeHand = null;
-                }
-                // Auto-shoot if holding pistol (fires every 300ms)
-                else if (time - lastShootTime > 300) {
+            // Shooting Logic (Finger curl)
+            if (STATE.isGrabbing) {
+                let isShooting = (STATE.activeHand === 'right' && POSE3D.rightShoot) || 
+                                 (STATE.activeHand === 'left' && POSE3D.leftShoot);
+
+                // Glow hands red when shooting
+                handLeftMesh.material.emissive.setHex(POSE3D.leftShoot ? 0xef4444 : 0x1e293b);
+                handRightMesh.material.emissive.setHex(POSE3D.rightShoot ? 0xef4444 : 0x1e293b);
+
+                // Auto-shoot if pulling the trigger (fires every 250ms)
+                if (isShooting && time - lastShootTime > 250) {
                     shootBullet();
                     lastShootTime = time;
                 }
@@ -633,8 +698,25 @@
         } else {
             // Stop hands if AI loses tracking
             handLeftBody.velocity.set(0,0,0); handRightBody.velocity.set(0,0,0); headBody.velocity.set(0,0,0);
-            // Hide bones when untracked
-            Object.values(bodyBones).forEach(b => b.scale.set(0,0,0));
+            pistolBody.velocity.set(0,0,0);
+        }
+
+        // --- CAMERA VIEW ---
+        if (STATE.isFPS) {
+            // Attach camera inside the helmet!
+            camera.position.copy(headMesh.position);
+            camera.position.y += 1.5; // Eye level
+            camera.position.z -= 2.0; // Push forward to not clip helmet
+            // Look straight ahead down the range
+            camera.lookAt(camera.position.x, camera.position.y, -100);
+            
+            // Hide own head to prevent clipping
+            headMesh.visible = false;
+        } else {
+            // AR Mirror View
+            camera.position.set(0, 20, 45);
+            camera.lookAt(0, 15, 0);
+            headMesh.visible = true;
         }
 
         // 3. Sync Graphics with Physics
