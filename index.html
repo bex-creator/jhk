@@ -289,7 +289,8 @@
                     );
                 };
 
-                RAW_TARGETS.head.copy(map3D(0, 5)); 
+                // Move head cluster down (changed yOffset from 5 to 2)
+                RAW_TARGETS.head.copy(map3D(0, 2)); 
                 RAW_TARGETS.right.copy(map3D(15));  
                 RAW_TARGETS.left.copy(map3D(16));   
                 RAW_TARGETS.rightElbow.copy(map3D(13));
@@ -304,11 +305,11 @@
                 RAW_TARGETS.rightAnkle.copy(map3D(27));
                 RAW_TARGETS.leftAnkle.copy(map3D(28));
 
-                // Face Tracking (MP mirrored maps left/right correctly)
-                RAW_TARGETS.eyeL.copy(map3D(5, 5));  // MP 5 is right eye, screen left
-                RAW_TARGETS.eyeR.copy(map3D(2, 5));  // MP 2 is left eye, screen right
-                RAW_TARGETS.mouthL.copy(map3D(10, 5)); // MP 10 is right mouth, screen left
-                RAW_TARGETS.mouthR.copy(map3D(9, 5));  // MP 9 is left mouth, screen right
+                // Face Tracking (Moved down by changing yOffset from 5 to 2)
+                RAW_TARGETS.eyeL.copy(map3D(5, 2));  
+                RAW_TARGETS.eyeR.copy(map3D(2, 2));  
+                RAW_TARGETS.mouthL.copy(map3D(10, 2)); 
+                RAW_TARGETS.mouthR.copy(map3D(9, 2));  
 
                 // Shoot Detection
                 const getDist2D = (idx1, idx2) => Math.hypot(lm[idx1].x - lm[idx2].x, lm[idx1].y - lm[idx2].y);
@@ -443,8 +444,8 @@
         handLeftMesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), stickMat); scene.add(handLeftMesh);
         handRightMesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), stickMat); scene.add(handRightMesh);
         
-        // Head (White sphere)
-        headMesh = new THREE.Mesh(new THREE.SphereGeometry(2.5, 32, 32), stickMat);
+        // Head (Block head instead of round)
+        headMesh = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), stickMat);
         headMesh.castShadow = true;
         scene.add(headMesh);
 
@@ -463,9 +464,6 @@
         };
 
         bodyBones = {
-            // Neck
-            neck: createLimb(),
-
             // Arms
             leftUpper: createLimb(), leftLower: createLimb(),
             rightUpper: createLimb(), rightLower: createLimb(),
@@ -688,10 +686,6 @@
                 mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p2.clone().sub(p1).normalize());
             };
             
-            // Neck (Connects midpoint of shoulders to the head)
-            const shoulderMid = new THREE.Vector3().addVectors(POSE3D.leftShoulder, POSE3D.rightShoulder).multiplyScalar(0.5);
-            updateBone(bodyBones.neck, shoulderMid, POSE3D.head);
-
             // Arms
             updateBone(bodyBones.leftUpper, POSE3D.leftShoulder, POSE3D.leftElbow);
             updateBone(bodyBones.leftLower, POSE3D.leftElbow, POSE3D.left);
@@ -769,8 +763,8 @@
         handLeftMesh.position.copy(handLeftBody.position);
         handRightMesh.position.copy(handRightBody.position);
         
-        // Push head back slightly (-Z) so the nose, eyes, and mouth sit perfectly on the front surface!
-        headMesh.position.copy(headBody.position).add(new THREE.Vector3(0, 0, -1.8));
+        // Push head back slightly (-Z) so the nose, eyes, and mouth sit perfectly on the front surface of the block head!
+        headMesh.position.copy(headBody.position).add(new THREE.Vector3(0, 0, -2.0));
         
         // Sync Face Features
         eyeLMesh.position.copy(POSE3D.eyeL);
