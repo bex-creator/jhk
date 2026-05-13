@@ -3,386 +3,536 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>DIY VR Physics Sandbox</title>
+    <title>3D AR Smasher (Phone + PC)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Three.js for 3D Graphics -->
+    <!-- 3D Engine & Physics -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Cannon.js for Bonelab-style Physics -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
     
-    <!-- Firebase for Multi-Device connection -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <!-- WebRTC for Phone-to-PC Camera Streaming -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
-        // Environment setup
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "AIzaSyCN9lkBMMTaEk8FR4TKgBqcvDkVFtnDUrk",
-            authDomain: "weblox-1f8b0.firebaseapp.com",
-            projectId: "weblox-1f8b0",
-            storageBucket: "weblox-1f8b0.firebasestorage.app",
-            messagingSenderId: "765567900101",
-            appId: "1:765567900101:web:fa03494970c3019f1e93ac",
-            measurementId: "G-D7E2MT985J"
-        };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'diy-vr-sandbox-html';
+    <!-- MediaPipe for Body Tracking -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #020617; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; }
+        #game_canvas { display: block; position: absolute; top: 0; left: 0; z-index: 10; width: 100%; height: 100%; }
+        .layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .hidden { display: none !important; }
+        /* Video is hidden on PC, shown full screen on phone */
+        #received_video, #local_video { display: none; }
+        .phone-video-active { display: block !important; position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 5; opacity: 0.5; }
+    </style>
+</head>
+<body>
 
-        // State
-        let user = null;
-        let roomCode = "";
-        let currentRole = ""; 
-        let lastSyncTime = 0;
-        const SYNC_INTERVAL = 50; 
+    <!-- Videos for WebRTC -->
+    <video id="received_video" autoplay playsinline></video>
+    <video id="local_video" autoplay playsinline muted></video>
 
-        // 3D & Physics
-        let scene, camera, renderer, world;
-        let physicsBodies = [];
-        let renderMeshes = [];
+    <!-- 3D Canvas -->
+    <canvas id="game_canvas" class="hidden"></canvas>
+
+    <!-- UI Overlay: Main Menu -->
+    <div id="ui_main" class="layer bg-slate-900/90 backdrop-blur-md">
+        <h1 class="text-5xl font-black mb-8 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600">3D AR SMASHER</h1>
+        <p class="mb-10 text-slate-300 max-w-md text-center">Play on your PC screen while using your phone's camera as the motion tracker!</p>
         
-        // Player Rig
-        let playerBody;
-        let leftHandBody, rightHandBody;
-        let leftHandMesh, rightHandMesh;
-        const moveSpeed = 5;
-        const input = { w: false, a: false, s: false, d: false, space: false };
+        <div class="flex flex-col md:flex-row gap-6">
+            <button id="btn_host" class="bg-blue-600 hover:bg-blue-500 px-8 py-6 rounded-2xl font-bold text-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition transform hover:scale-105">
+                💻 PLAY ON PC<br><span class="text-sm font-normal opacity-75">(Acts as Screen)</span>
+            </button>
+            <button id="btn_join" class="bg-emerald-600 hover:bg-emerald-500 px-8 py-6 rounded-2xl font-bold text-xl shadow-[0_0_20px_rgba(16,185,129,0.4)] transition transform hover:scale-105">
+                📱 USE PHONE<br><span class="text-sm font-normal opacity-75">(Acts as Camera)</span>
+            </button>
+        </div>
+        <button id="btn_solo" class="mt-8 text-sm text-slate-400 hover:text-white underline">Just use PC Webcam instead</button>
+    </div>
 
-        // UI
-        const menuUI = document.getElementById('menu-ui');
-        const hostUI = document.getElementById('host-ui');
-        const clientUI = document.getElementById('client-ui');
+    <!-- UI Overlay: PC Host Screen -->
+    <div id="ui_host" class="layer bg-slate-900/90 backdrop-blur-md hidden">
+        <h2 class="text-3xl font-bold mb-4">PC Screen Mode</h2>
+        <p class="mb-6 text-slate-300">Open this app on your phone and enter this code:</p>
+        <div class="bg-black/50 px-8 py-4 rounded-xl border border-blue-500/50 text-6xl font-mono tracking-widest text-cyan-400 mb-8" id="room_code_display">----</div>
+        <div class="flex items-center gap-3 text-yellow-400" id="host_status">
+            <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            Waiting for phone camera...
+        </div>
+    </div>
 
-        async function initAuth() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (e) {
-                console.error("Auth failed:", e);
-                document.getElementById('status-text').innerText = "Network Error.";
-            }
-        }
+    <!-- UI Overlay: Phone Join Screen -->
+    <div id="ui_join" class="layer bg-slate-900/90 backdrop-blur-md hidden">
+        <h2 class="text-3xl font-bold mb-4">Phone Camera Mode</h2>
+        <p class="mb-6 text-slate-300">Enter the code shown on your PC screen:</p>
+        <input type="number" id="room_code_input" placeholder="1234" class="bg-black/50 text-center px-6 py-4 rounded-xl border border-emerald-500/50 text-4xl font-mono text-emerald-400 mb-6 w-48 outline-none">
+        <button id="btn_connect" class="bg-emerald-600 hover:bg-emerald-500 px-8 py-4 rounded-xl font-bold text-xl w-48 transition transform active:scale-95">Connect</button>
+        <p id="join_status" class="mt-4 text-emerald-300 hidden">Connecting to PC...</p>
+    </div>
 
-        onAuthStateChanged(auth, (u) => {
-            user = u;
-            if(user) {
-                document.querySelectorAll('.role-btn').forEach(btn => btn.disabled = false);
-                document.getElementById('status-text').innerText = "Connected. Select a role.";
-            }
+    <!-- HUD (In Game) -->
+    <div id="ui_hud" class="absolute top-0 left-0 w-full p-6 pointer-events-none hidden z-30 flex justify-between">
+        <div class="bg-black/40 backdrop-blur px-6 py-2 rounded-xl border border-white/10 text-3xl font-black text-cyan-400 drop-shadow-md">
+            SCORE: <span id="score_val" class="text-white">0</span>
+        </div>
+        <div class="bg-black/40 backdrop-blur px-6 py-2 rounded-xl border border-white/10 text-sm text-right max-w-xs">
+            Reach out to grab the bat.<br>Swing to destroy falling boxes!
+        </div>
+    </div>
+
+<script>
+    // ==========================================
+    // GAME STATE & CONSTANTS
+    // ==========================================
+    const STATE = { mode: null, score: 0, isGrabbing: false, activeHand: null };
+    let peer = null, mediaStream = null, pose = null;
+    
+    // Physics & 3D vars
+    let world, scene, camera, renderer;
+    let handLeftBody, handRightBody, headBody;
+    let handLeftMesh, handRightMesh, headMesh;
+    let batBody, batMesh, batConstraint;
+    let boxes = [];
+    let particles = [];
+    let lastTime = 0;
+
+    // Pose Targets mapped to 3D space
+    const POSE3D = {
+        left: {x:-5, y:5, z:0}, right: {x:5, y:5, z:0}, head: {x:0, y:12, z:0}, visible: false
+    };
+
+    // UI Elements
+    const uiMain = document.getElementById('ui_main');
+    const uiHost = document.getElementById('ui_host');
+    const uiJoin = document.getElementById('ui_join');
+    const uiHud = document.getElementById('ui_hud');
+    const canvas = document.getElementById('game_canvas');
+    const vidRecv = document.getElementById('received_video');
+    const vidLocal = document.getElementById('local_video');
+    const scoreVal = document.getElementById('score_val');
+
+    // ==========================================
+    // NETWORKING (PEERJS) - PHONE TO PC
+    // ==========================================
+    
+    document.getElementById('btn_host').addEventListener('click', () => initHost());
+    document.getElementById('btn_join').addEventListener('click', () => {
+        uiMain.classList.add('hidden');
+        uiJoin.classList.remove('hidden');
+    });
+    document.getElementById('btn_solo').addEventListener('click', () => startPCWebcam());
+
+    // --- PC HOST MODE ---
+    function initHost() {
+        uiMain.classList.add('hidden');
+        uiHost.classList.remove('hidden');
+        
+        const code = Math.floor(1000 + Math.random() * 9000).toString();
+        document.getElementById('room_code_display').innerText = code;
+        const peerId = `ar-smasher-${code}`;
+        
+        peer = new Peer(peerId);
+        
+        peer.on('open', (id) => {
+            console.log('PC Host Ready:', id);
         });
 
-        initAuth();
-
-        // --- CONTROLS ---
-        window.addEventListener('keydown', (e) => {
-            const key = e.key.toLowerCase();
-            if (key in input) input[key] = true;
-            if (key === ' ') input.space = true;
-        });
-        window.addEventListener('keyup', (e) => {
-            const key = e.key.toLowerCase();
-            if (key in input) input[key] = false;
-            if (key === ' ') input.space = false;
-        });
-
-        // --- HOST LOGIC ---
-        async function startHost() {
-            if (!user) return;
-            menuUI.classList.add('hidden');
-            hostUI.classList.remove('hidden');
-            document.getElementById('display-code').innerText = roomCode;
-
-            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'vrsessions', roomCode);
-            
-            await setDoc(roomRef, {
-                hostId: user.uid,
-                headset: { x: 0, y: 0, z: 0, w: 1 },
-                left: { x: 0, y: 0, z: 0, w: 1 },
-                right: { x: 0, y: 0, z: 0, w: 1 }
+        // When phone calls
+        peer.on('call', (call) => {
+            document.getElementById('host_status').innerText = "Phone connected! Starting engine...";
+            call.answer(); // Answer automatically
+            call.on('stream', (remoteStream) => {
+                // We got the phone camera!
+                vidRecv.srcObject = remoteStream;
+                startEngine(vidRecv);
             });
+        });
+        
+        peer.on('error', (err) => alert("Network error: " + err));
+    }
 
-            init3D();
-
-            onSnapshot(roomRef, (docSnap) => {
-                if (!docSnap.exists() || !camera) return;
-                const data = docSnap.data();
-
-                if (data.headset) {
-                    camera.quaternion.set(data.headset.x, data.headset.y, data.headset.z, data.headset.w);
-                }
-                if (data.left && leftHandBody) {
-                    leftHandBody.quaternion.set(data.left.x, data.left.y, data.left.z, data.left.w);
-                }
-                if (data.right && rightHandBody) {
-                    rightHandBody.quaternion.set(data.right.x, data.right.y, data.right.z, data.right.w);
-                }
-            }, (err) => console.error("Snapshot error:", err));
-        }
-
-        // --- CLIENT LOGIC ---
-        async function startClientDevice() {
-            if (!user) return;
-            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'vrsessions', roomCode);
-            const snap = await getDoc(roomRef);
-            if (!snap.exists()) { alert("Room not found!"); return; }
-
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try { await DeviceOrientationEvent.requestPermission(); } catch (e) { console.error(e); }
-            }
-
-            menuUI.classList.add('hidden');
-            clientUI.classList.remove('hidden');
-            document.getElementById('client-role-display').innerText = `Active: ${currentRole.toUpperCase()}`;
-
-            const euler = new THREE.Euler(0,0,0, 'YXZ');
-            const quaternion = new THREE.Quaternion();
-
-            window.addEventListener('deviceorientation', (event) => {
-                const now = Date.now();
-                if (now - lastSyncTime < SYNC_INTERVAL) return;
+    // --- PHONE CAMERA MODE ---
+    document.getElementById('btn_connect').addEventListener('click', async () => {
+        const code = document.getElementById('room_code_input').value;
+        if(code.length !== 4) return alert("Enter 4 digit code");
+        
+        document.getElementById('join_status').classList.remove('hidden');
+        
+        try {
+            // Get Phone Camera (Front facing usually preferred so user can look at PC while playing)
+            mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'user', width: {ideal: 640}, height: {ideal: 480} }, 
+                audio: false 
+            });
+            
+            // Show camera on phone
+            vidLocal.srcObject = mediaStream;
+            vidLocal.classList.add('phone-video-active');
+            
+            peer = new Peer();
+            peer.on('open', (id) => {
+                const targetId = `ar-smasher-${code}`;
+                const call = peer.call(targetId, mediaStream);
                 
-                let alpha = event.alpha ? THREE.MathUtils.degToRad(event.alpha) : 0;
-                let beta = event.beta ? THREE.MathUtils.degToRad(event.beta) : 0;
-                let gamma = event.gamma ? THREE.MathUtils.degToRad(event.gamma) : 0;
-
-                euler.set(beta, alpha, -gamma, 'YXZ');
-                quaternion.setFromEuler(euler);
-
-                const updatePayload = {};
-                updatePayload[currentRole] = { x: quaternion.x, y: quaternion.y, z: quaternion.z, w: quaternion.w };
-                setDoc(roomRef, updatePayload, { merge: true });
-                lastSyncTime = now;
+                call.on('error', () => alert("Could not connect to PC. Check code."));
+                
+                document.getElementById('ui_join').innerHTML = `
+                    <div class="bg-black/70 p-6 rounded-xl text-center backdrop-blur z-20 mt-20">
+                        <h2 class="text-3xl text-emerald-400 font-bold mb-2">Streaming...</h2>
+                        <p class="text-white mb-4">Look at your PC screen to play!</p>
+                        <p class="text-sm text-slate-300">Prop your phone up so it can see your upper body.</p>
+                    </div>
+                `;
             });
+        } catch(err) {
+            alert("Camera access denied! Please allow permissions.");
         }
+    });
 
-        // --- 3D & PHYSICS ---
-        function init3D() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x111111);
-            scene.fog = new THREE.Fog(0x111111, 0, 60);
-            
-            const grid = new THREE.GridHelper(100, 100, 0x444444, 0x222222);
-            scene.add(grid);
-
-            const light = new THREE.DirectionalLight(0xffffff, 1.2);
-            light.position.set(10, 20, 10);
-            scene.add(light);
-            scene.add(new THREE.AmbientLight(0x505050));
-
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            world = new CANNON.World();
-            world.gravity.set(0, -18, 0); 
-            world.broadphase = new CANNON.NaiveBroadphase();
-            world.solver.iterations = 25;
-
-            const groundBody = new CANNON.Body({ 
-                mass: 0, 
-                shape: new CANNON.Plane(),
-                material: new CANNON.Material({ friction: 0.5 }) 
-            });
-            groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-            world.addBody(groundBody);
-
-            const playerShape = new CANNON.Sphere(0.4);
-            playerBody = new CANNON.Body({ mass: 80, shape: playerShape, fixedRotation: true });
-            playerBody.position.set(0, 1, 0);
-            playerBody.linearDamping = 0.95;
-            world.addBody(playerBody);
-
-            // Spawning Box Tower
-            for(let i=0; i<40; i++) {
-                spawnBox(Math.random()*4-2, 1+i*0.6, -5);
-            }
-
-            // --- WEAPONS ---
-            spawnWeapon("Crowbar", -2, 1, -3);
-            spawnWeapon("Lead Pipe", 2, 1, -3);
-            spawnWeapon("Heavy Block", 0, 1, -2);
-
-            const handShape = new CANNON.Box(new CANNON.Vec3(0.08, 0.08, 0.08));
-            leftHandBody = new CANNON.Body({ mass: 5, shape: handShape, collisionFilterGroup: 2 });
-            rightHandBody = new CANNON.Body({ mass: 5, shape: handShape, collisionFilterGroup: 2 });
-            world.addBody(leftHandBody);
-            world.addBody(rightHandBody);
-
-            leftHandMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.2), new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0x440000 }));
-            rightHandMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.2), new THREE.MeshStandardMaterial({ color: 0x3333ff, emissive: 0x000044 }));
-            scene.add(leftHandMesh);
-            scene.add(rightHandMesh);
-
-            animate();
+    // --- PC SOLO MODE (Fallback) ---
+    async function startPCWebcam() {
+        uiMain.classList.add('hidden');
+        try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }});
+            vidRecv.srcObject = mediaStream;
+            startEngine(vidRecv);
+        } catch(err) {
+            alert("No webcam found.");
         }
+    }
 
-        function spawnBox(x, y, z) {
-            const size = 0.5;
-            const body = new CANNON.Body({ 
-                mass: 10, 
-                shape: new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2)),
-                material: new CANNON.Material({ friction: 0.3 })
-            });
-            body.position.set(x, y, z);
-            world.addBody(body);
-            physicsBodies.push(body);
 
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshStandardMaterial({ color: 0x888888 }));
-            scene.add(mesh);
-            renderMeshes.push(mesh);
-        }
+    // ==========================================
+    // AI POSE TRACKING (MEDIAPIPE)
+    // ==========================================
+    function startEngine(videoSource) {
+        uiHost.classList.add('hidden');
+        uiHud.classList.remove('hidden');
+        canvas.classList.remove('hidden');
+        
+        // Init 3D World first
+        init3D();
+        
+        // Init AI
+        pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
+        pose.setOptions({
+            modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false,
+            minDetectionConfidence: 0.5, minTrackingConfidence: 0.5
+        });
+        
+        pose.onResults((results) => {
+            if (results.poseLandmarks) {
+                POSE3D.visible = true;
+                const lm = results.poseLandmarks;
+                
+                // Map 2D landmarks to 3D space
+                // ThreeJS space: Center is 0,0,0. 
+                // Width roughly -15 to +15. Height roughly 0 to +20.
+                const map3D = (idx, yOffset = 0) => {
+                    return {
+                        x: -(lm[idx].x - 0.5) * 35, // Mirrored X, scaled wide
+                        y: -(lm[idx].y - 0.5) * 25 + 10 + yOffset, // Inverted Y, scaled, shifted up
+                        z: (lm[idx].z || 0) * -20 // Z depth
+                    };
+                };
 
-        function spawnWeapon(type, x, y, z) {
-            let body, mesh;
-            if(type === "Crowbar") {
-                const shape = new CANNON.Box(new CANNON.Vec3(0.03, 0.03, 0.6));
-                body = new CANNON.Body({ mass: 15, shape: shape });
-                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 1.2), new THREE.MeshStandardMaterial({ color: 0xffaa00, metalness: 0.8, roughness: 0.2 }));
-            } else if(type === "Lead Pipe") {
-                const shape = new CANNON.Cylinder(0.05, 0.05, 1.5, 8);
-                body = new CANNON.Body({ mass: 20, shape: shape });
-                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.9 }));
+                POSE3D.head = map3D(0, 5); // Nose, shift up slightly for visual center
+                POSE3D.right = map3D(15);  // MP Right Wrist is user's physical right hand (mirrored)
+                POSE3D.left = map3D(16);   // MP Left Wrist 
             } else {
-                const shape = new CANNON.Box(new CANNON.Vec3(0.3, 0.3, 0.3));
-                body = new CANNON.Body({ mass: 50, shape: shape });
-                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshStandardMaterial({ color: 0x444444 }));
+                POSE3D.visible = false;
             }
-            
-            body.position.set(x, y, z);
-            world.addBody(body);
-            physicsBodies.push(body);
-            scene.add(mesh);
-            renderMeshes.push(mesh);
-        }
-
-        const velocity = new CANNON.Vec3();
-        function animate() {
-            requestAnimationFrame(animate);
-
-            if (!playerBody || !camera) return;
-
-            // Player Movement
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            forward.y = 0; forward.normalize();
-            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-            right.y = 0; right.normalize();
-
-            velocity.set(0, 0, 0);
-            if (input.w) velocity.vadd(forward.multiplyScalar(moveSpeed), velocity);
-            if (input.s) velocity.vsub(forward.multiplyScalar(moveSpeed), velocity);
-            if (input.a) velocity.vsub(right.multiplyScalar(moveSpeed), velocity);
-            if (input.d) velocity.vadd(right.multiplyScalar(moveSpeed), velocity);
-            
-            playerBody.position.x += velocity.x * (1/60);
-            playerBody.position.z += velocity.z * (1/60);
-            
-            if (input.space && Math.abs(playerBody.velocity.y) < 0.1) {
-                playerBody.velocity.y = 8;
-            }
-
-            camera.position.copy(playerBody.position);
-            camera.position.y += 0.8; 
-
-            // Hand Physics Targets
-            const lPos = new THREE.Vector3(-0.4, -0.3, -0.6).applyQuaternion(camera.quaternion).add(camera.position);
-            const rPos = new THREE.Vector3(0.4, -0.3, -0.6).applyQuaternion(camera.quaternion).add(camera.position);
-            
-            // P-Controller for Hands (Bonelab handles hands as physical objects)
-            const strength = 0.15;
-            leftHandBody.position.lerp(lPos, strength, leftHandBody.position);
-            rightHandBody.position.lerp(rPos, strength, rightHandBody.position);
-
-            world.step(1/60);
-
-            // Sync Visuals
-            for(let i=0; i<physicsBodies.length; i++) {
-                renderMeshes[i].position.copy(physicsBodies[i].position);
-                renderMeshes[i].quaternion.copy(physicsBodies[i].quaternion);
-            }
-            leftHandMesh.position.copy(leftHandBody.position);
-            leftHandMesh.quaternion.copy(leftHandBody.quaternion);
-            rightHandMesh.position.copy(rightHandBody.position);
-            rightHandMesh.quaternion.copy(rightHandBody.quaternion);
-
-            renderer.render(scene, camera);
-        }
-
-        // --- UI BUTTON LISTENERS ---
-        document.getElementById('btn-host').addEventListener('click', () => {
-            currentRole = 'host';
-            roomCode = Math.floor(1000 + Math.random() * 9000).toString();
-            startHost();
         });
 
-        const joinWithRole = (role) => {
-            const codeInput = document.getElementById('room-input');
-            roomCode = codeInput.value;
-            if(roomCode.length === 4) {
-                currentRole = role;
-                startClientDevice();
-            } else {
-                alert("Enter the 4-digit code shown on the Host PC.");
+        // Create a loop to send video frames to MediaPipe
+        async function captureFrame() {
+            if(videoSource.readyState >= 2) {
+                await pose.send({image: videoSource});
             }
-        };
+            requestAnimationFrame(captureFrame);
+        }
+        captureFrame();
 
-        document.getElementById('btn-headset').addEventListener('click', () => joinWithRole('headset'));
-        document.getElementById('btn-left').addEventListener('click', () => joinWithRole('left'));
-        document.getElementById('btn-right').addEventListener('click', () => joinWithRole('right'));
+        // Start render loop
+        requestAnimationFrame(renderLoop);
+        
+        // Spawn boxes
+        setInterval(spawnBox, 1500);
+    }
+
+
+    // ==========================================
+    // 3D GRAPHICS & PHYSICS (THREE.JS + CANNON.JS)
+    // ==========================================
+    function init3D() {
+        // --- 1. Physics Setup (Cannon.js) ---
+        world = new CANNON.World();
+        world.gravity.set(0, -15, 0); // Fast falling
+        world.broadphase = new CANNON.NaiveBroadphase();
+        world.solver.iterations = 10;
+
+        // Ground Plane (Physics)
+        const groundShape = new CANNON.Plane();
+        const groundBody = new CANNON.Body({ mass: 0 }); // 0 mass = static
+        groundBody.addShape(groundShape);
+        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
+        world.addBody(groundBody);
+
+        // Physics Materials
+        const physicsMat = new CANNON.Material();
+        const contactMat = new CANNON.ContactMaterial(physicsMat, physicsMat, { friction: 0.1, restitution: 0.5 });
+        world.addContactMaterial(contactMat);
+
+        // Player Hands & Head (Kinematic bodies driven by AI)
+        const handShape = new CANNON.Sphere(1.5);
+        handLeftBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: physicsMat });
+        handRightBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: physicsMat });
+        headBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: physicsMat });
+        handLeftBody.addShape(handShape); handRightBody.addShape(handShape); headBody.addShape(new CANNON.Sphere(2.5));
+        
+        world.addBody(handLeftBody); world.addBody(handRightBody); world.addBody(headBody);
+
+        // The Bat (Dynamic Body)
+        const batRadius = 0.5, batLength = 12;
+        const batShape = new CANNON.Cylinder(batRadius, batRadius, batLength, 12);
+        batBody = new CANNON.Body({ mass: 2, material: physicsMat });
+        // Cannon cylinder default axis is Z. We rotate it to align with Y.
+        const q = new CANNON.Quaternion(); q.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
+        batBody.addShape(batShape, new CANNON.Vec3(0,0,0), q);
+        batBody.position.set(0, 10, 0); // Start floating
+        batBody.linearDamping = 0.1;
+        batBody.angularDamping = 0.5;
+        world.addBody(batBody);
+
+
+        // --- 2. Graphics Setup (Three.js) ---
+        scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020617, 0.015);
+
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 15, 30);
+        camera.lookAt(0, 10, 0);
+
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
 
         window.addEventListener('resize', () => {
-            if (camera && renderer) {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Lights
+        const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambient);
+        const spotLight = new THREE.SpotLight(0x06b6d4, 1.5); // Cyan light
+        spotLight.position.set(0, 40, 20);
+        spotLight.target.position.set(0, 0, 0);
+        spotLight.castShadow = true;
+        scene.add(spotLight);
+        scene.add(spotLight.target);
+
+        // Graphics: Environment Grid
+        const gridHelper = new THREE.GridHelper(100, 50, 0x06b6d4, 0x1e293b);
+        gridHelper.position.y = 0;
+        scene.add(gridHelper);
+
+        // Graphics: Player Hands/Head
+        const handGeo = new THREE.SphereGeometry(1.5, 32, 32);
+        const handMat = new THREE.MeshStandardMaterial({ 
+            color: 0x38bdf8, emissive: 0x0ea5e9, emissiveIntensity: 0.5, transparent: true, opacity: 0.8
+        });
+        handLeftMesh = new THREE.Mesh(handGeo, handMat); scene.add(handLeftMesh);
+        handRightMesh = new THREE.Mesh(handGeo, handMat); scene.add(handRightMesh);
+        
+        const headGeo = new THREE.SphereGeometry(2.5, 32, 32);
+        headMesh = new THREE.Mesh(headGeo, handMat); scene.add(headMesh);
+
+        // Graphics: Bat
+        const batGeo = new THREE.CylinderGeometry(batRadius, batRadius, batLength, 16);
+        const batMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.3, metalness: 0.8 });
+        batMesh = new THREE.Mesh(batGeo, batMat);
+        batMesh.castShadow = true;
+        scene.add(batMesh);
+        
+        // Add glowing trail lines to bat
+        const handleMat = new THREE.MeshBasicMaterial({color: 0x000000});
+        const handleMesh = new THREE.Mesh(new THREE.CylinderGeometry(batRadius+0.05, batRadius+0.05, 3, 16), handleMat);
+        handleMesh.position.y = -batLength/2 + 1.5;
+        batMesh.add(handleMesh);
+
+        // Collision Event detection (CannonJS)
+        batBody.addEventListener("collide", (e) => {
+            const contactNormal = e.contact.ni;
+            // Calculate relative velocity along the normal
+            const relVel = e.contact.getImpactVelocityAlongNormal();
+            
+            // If the bat hits a box hard enough
+            if(Math.abs(relVel) > 15 && e.body.userData && e.body.userData.isBox) {
+                breakBox(e.body.userData.id);
             }
         });
-    </script>
-</head>
-<body class="bg-black overflow-hidden font-sans select-none">
-    <div id="menu-ui" class="fixed inset-0 flex items-center justify-center bg-gray-900 text-white z-50">
-        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md mx-4">
-            <h1 class="text-3xl font-bold mb-2 text-center text-indigo-400">BONELAB PHYSICS</h1>
-            <p id="status-text" class="text-sm text-yellow-400 mb-6 text-center">Initializing...</p>
-            <div class="mb-6 pb-6 border-b border-gray-700">
-                <button id="btn-host" disabled class="role-btn w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-lg font-bold">Start PC Host</button>
-            </div>
-            <div>
-                <input id="room-input" type="number" placeholder="Enter Code" class="w-full bg-gray-700 text-center text-xl py-3 rounded-lg mb-3">
-                <div class="grid grid-cols-1 gap-2">
-                    <button id="btn-headset" disabled class="role-btn w-full bg-emerald-600 py-3 rounded-lg font-bold">Connect Headset</button>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button id="btn-left" disabled class="role-btn bg-red-600 py-3 rounded-lg font-bold">Left Hand</button>
-                        <button id="btn-right" disabled class="role-btn bg-blue-600 py-3 rounded-lg font-bold">Right Hand</button>
-                    </div>
-                </div>
-            </div>
-            <div class="mt-4 text-center">
-                <p class="text-xs text-gray-500 italic">WASD + Space on PC to navigate the sandbox</p>
-            </div>
-        </div>
-    </div>
-    <div id="host-ui" class="hidden fixed top-4 left-4 z-40 text-white">
-        <div class="bg-black/60 p-4 rounded-xl border border-gray-700 backdrop-blur-sm">
-            <h2 id="display-code" class="text-4xl font-mono font-bold text-indigo-400">----</h2>
-            <div class="mt-2 text-xs text-gray-300 space-y-1">
-                <p>• <b>WASD</b>: Move</p>
-                <p>• <b>SPACE</b>: Jump</p>
-                <p>• <b>Phone Gyro</b>: Rotate Head & Hands</p>
-            </div>
-        </div>
-    </div>
-    <div id="client-ui" class="hidden fixed inset-0 bg-black flex flex-col items-center justify-center text-white z-50">
-        <h1 id="client-role-display" class="text-3xl font-bold text-emerald-500 mb-4 tracking-widest">STREAMING...</h1>
-        <div class="w-24 h-24 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-    </div>
+    }
+
+    // --- Game Logic Functions ---
+
+    function spawnBox() {
+        const size = 3 + Math.random() * 2;
+        const id = Math.random().toString(36).substr(2, 9);
+        
+        // Physics
+        const shape = new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2));
+        const body = new CANNON.Body({ mass: size });
+        body.addShape(shape);
+        // Ensure boxes fall roughly on the same Z plane as the bat (z=0) so user doesn't miss
+        body.position.set((Math.random() - 0.5) * 20, 40, (Math.random() - 0.5) * 5); 
+        body.userData = { isBox: true, id: id };
+        world.addBody(body);
+
+        // Graphics
+        const geo = new THREE.BoxGeometry(size, size, size);
+        const mat = new THREE.MeshStandardMaterial({ 
+            color: 0xf59e0b, // Amber / Wood
+            roughness: 0.8
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        scene.add(mesh);
+
+        // Wireframe overlay
+        const edges = new THREE.EdgesGeometry(geo);
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x78350f }));
+        mesh.add(line);
+
+        boxes.push({ id, body, mesh, size });
+    }
+
+    function createExplosion(x,y,z, colorHex) {
+        for(let i=0; i<15; i++) {
+            const geo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+            const mat = new THREE.MeshBasicMaterial({color: colorHex});
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x + (Math.random()-0.5)*2, y + (Math.random()-0.5)*2, z + (Math.random()-0.5)*2);
+            scene.add(mesh);
+            
+            particles.push({
+                mesh: mesh,
+                vx: (Math.random()-0.5)*0.5, vy: Math.random()*0.5, vz: (Math.random()-0.5)*0.5,
+                life: 1.0
+            });
+        }
+    }
+
+    function breakBox(id) {
+        const index = boxes.findIndex(b => b.id === id);
+        if (index > -1) {
+            const box = boxes[index];
+            createExplosion(box.body.position.x, box.body.position.y, box.body.position.z, 0xf59e0b);
+            
+            world.removeBody(box.body);
+            scene.remove(box.mesh);
+            boxes.splice(index, 1);
+            
+            STATE.score += 50;
+            scoreVal.innerText = STATE.score;
+            scoreVal.parentElement.classList.add('scale-125', 'text-yellow-300');
+            setTimeout(() => scoreVal.parentElement.classList.remove('scale-125', 'text-yellow-300'), 150);
+        }
+    }
+
+    // --- Main Render & Physics Loop ---
+    function renderLoop(time) {
+        requestAnimationFrame(renderLoop);
+        
+        const dt = (time - lastTime) / 1000 || 0.016;
+        lastTime = time;
+
+        // 1. Step Physics
+        world.step(1/60, dt, 3);
+
+        // 2. Update Kinematic Player Bodies from AI
+        if (POSE3D.visible) {
+            // Smoothly move physics bodies towards target (Kinematic velocity approach)
+            const approach = (body, target) => {
+                const dx = target.x - body.position.x;
+                const dy = target.y - body.position.y;
+                const dz = target.z - body.position.z;
+                body.velocity.set(dx * 10, dy * 10, dz * 10);
+            };
+            
+            approach(handLeftBody, POSE3D.left);
+            approach(handRightBody, POSE3D.right);
+            approach(headBody, POSE3D.head);
+
+            // Bat Grabbing Logic
+            if (!STATE.isGrabbing) {
+                const distL = handLeftBody.position.distanceTo(batBody.position);
+                const distR = handRightBody.position.distanceTo(batBody.position);
+                
+                let grabBody = null;
+                if (distL < 4) grabBody = handLeftBody;
+                else if (distR < 4) grabBody = handRightBody;
+
+                if (grabBody) {
+                    STATE.isGrabbing = true;
+                    // Create PointToPoint constraint to hold bat by the handle
+                    batConstraint = new CANNON.PointToPointConstraint(
+                        grabBody, new CANNON.Vec3(0,0,0),
+                        batBody, new CANNON.Vec3(0, -4, 0) // Attach near bottom of bat
+                    );
+                    world.addConstraint(batConstraint);
+                }
+            }
+        } else {
+            // Stop hands if AI loses tracking
+            handLeftBody.velocity.set(0,0,0); handRightBody.velocity.set(0,0,0); headBody.velocity.set(0,0,0);
+        }
+
+        // 3. Sync Graphics with Physics
+        handLeftMesh.position.copy(handLeftBody.position);
+        handRightMesh.position.copy(handRightBody.position);
+        headMesh.position.copy(headBody.position);
+        
+        batMesh.position.copy(batBody.position);
+        batMesh.quaternion.copy(batBody.quaternion);
+
+        // Update Boxes & Cleanup fallen ones
+        for (let i = boxes.length - 1; i >= 0; i--) {
+            const b = boxes[i];
+            b.mesh.position.copy(b.body.position);
+            b.mesh.quaternion.copy(b.body.quaternion);
+            
+            if (b.body.position.y < -5) {
+                world.removeBody(b.body);
+                scene.remove(b.mesh);
+                boxes.splice(i, 1);
+            }
+        }
+
+        // Update Particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.mesh.position.x += p.vx;
+            p.mesh.position.y += p.vy;
+            p.mesh.position.z += p.vz;
+            p.vy -= 0.02; // gravity
+            p.life -= 0.03;
+            
+            // scale down
+            p.mesh.scale.setScalar(p.life);
+
+            if (p.life <= 0) {
+                scene.remove(p.mesh);
+                particles.splice(i, 1);
+            }
+        }
+
+        // 4. Render 3D Scene
+        renderer.render(scene, camera);
+    }
+</script>
 </body>
 </html>
