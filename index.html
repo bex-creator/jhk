@@ -108,6 +108,7 @@
     let particles = [];
     let bullets = [];
     let bodyBones = {};
+    let eyeLMesh, eyeRMesh; // For the face
     let lastTime = 0;
     let lastShootTime = 0;
 
@@ -118,7 +119,8 @@
         leftShoulder: new THREE.Vector3(), rightShoulder: new THREE.Vector3(),
         leftHip: new THREE.Vector3(), rightHip: new THREE.Vector3(),
         leftKnee: new THREE.Vector3(), rightKnee: new THREE.Vector3(),
-        leftAnkle: new THREE.Vector3(), rightAnkle: new THREE.Vector3()
+        leftAnkle: new THREE.Vector3(), rightAnkle: new THREE.Vector3(),
+        eyeL: new THREE.Vector3(), eyeR: new THREE.Vector3(), mouthL: new THREE.Vector3(), mouthR: new THREE.Vector3()
     };
 
     // Pose Targets mapped to 3D space
@@ -129,6 +131,7 @@
         leftHip: new THREE.Vector3(), rightHip: new THREE.Vector3(),
         leftKnee: new THREE.Vector3(), rightKnee: new THREE.Vector3(),
         leftAnkle: new THREE.Vector3(), rightAnkle: new THREE.Vector3(),
+        eyeL: new THREE.Vector3(), eyeR: new THREE.Vector3(), mouthL: new THREE.Vector3(), mouthR: new THREE.Vector3(),
         leftShoot: false, rightShoot: false,
         visible: false
     };
@@ -301,6 +304,12 @@
                 RAW_TARGETS.rightAnkle.copy(map3D(27));
                 RAW_TARGETS.leftAnkle.copy(map3D(28));
 
+                // Face Tracking (MP mirrored maps left/right correctly)
+                RAW_TARGETS.eyeL.copy(map3D(5, 5));  // MP 5 is right eye, screen left
+                RAW_TARGETS.eyeR.copy(map3D(2, 5));  // MP 2 is left eye, screen right
+                RAW_TARGETS.mouthL.copy(map3D(10, 5)); // MP 10 is right mouth, screen left
+                RAW_TARGETS.mouthR.copy(map3D(9, 5));  // MP 9 is left mouth, screen right
+
                 // Shoot Detection
                 const getDist2D = (idx1, idx2) => Math.hypot(lm[idx1].x - lm[idx2].x, lm[idx1].y - lm[idx2].y);
                 POSE3D.rightShoot = getDist2D(15, 19) < 0.05;
@@ -418,104 +427,35 @@
         scene.add(gridHelper);
 
         // ==========================================
-        // REAL HUMAN TEXTURES & MATERIALS
+        // STICKMAN TEXTURES & MATERIALS
         // ==========================================
         
-        // Advanced Procedural Fabric (Cross-hatching weave + Noise)
-        const genFabric = (baseColor, threadColor, scale) => {
-            const cvs = document.createElement('canvas');
-            cvs.width = 512; cvs.height = 512;
-            const ctx = cvs.getContext('2d');
-            ctx.fillStyle = baseColor; ctx.fillRect(0,0,512,512);
-            ctx.lineWidth = scale;
-            ctx.strokeStyle = threadColor;
-            
-            // Weave pattern (warp and weft)
-            for(let i=0; i<512; i+=scale*3) {
-                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke(); 
-                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke(); 
-            }
-            // Fabric imperfection noise
-            for(let i=0; i<20000; i++) {
-                ctx.fillStyle = `rgba(0,0,0,${Math.random()*0.08})`;
-                ctx.fillRect(Math.random()*512, Math.random()*512, 2, 2);
-            }
-            const tex = new THREE.CanvasTexture(cvs);
-            tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-            return tex;
-        };
-
-        // Advanced Procedural Skin (Subsurface Mottling + Pores)
-        const genSkin = () => {
-            const cvs = document.createElement('canvas');
-            cvs.width = 512; cvs.height = 512;
-            const ctx = cvs.getContext('2d');
-            ctx.fillStyle = '#f3cbb0'; // Base flesh tone
-            ctx.fillRect(0,0,512,512);
-            
-            // Soft subsurface mottling (reddish/bluish hues under skin)
-            for(let i=0; i<150; i++) {
-                const r = Math.random() * 40 + 20;
-                const x = Math.random() * 512;
-                const y = Math.random() * 512;
-                const isRed = Math.random() > 0.5;
-                const grad = ctx.createRadialGradient(x,y,0, x,y,r);
-                grad.addColorStop(0, isRed ? 'rgba(220, 100, 100, 0.05)' : 'rgba(100, 150, 200, 0.03)');
-                grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-                ctx.fillStyle = grad;
-                ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-            }
-            // Micro pores
-            for(let i=0; i<40000; i++) {
-                ctx.fillStyle = `rgba(130, 90, 70, ${Math.random()*0.06})`;
-                ctx.fillRect(Math.random()*512, Math.random()*512, 1, 1);
-            }
-            const tex = new THREE.CanvasTexture(cvs);
-            tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-            return tex;
-        };
-
-        // Realistic Materials using Physical properties and Bump Maps
-        const skinTex = genSkin();
-        const skinMat = new THREE.MeshPhysicalMaterial({ 
-            map: skinTex, 
-            roughness: 0.55, 
-            metalness: 0.1,
-            clearcoat: 0.15, // Simulates slight sweat/oil reflection
-            clearcoatRoughness: 0.6
+        // Clean, thin stickman materials
+        const stickMat = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, 
+            roughness: 0.8,
+            metalness: 0.1
         });
         
-        const shirtTex = genFabric('#1e40af', '#1e3a8a', 2);
-        const shirtMat = new THREE.MeshStandardMaterial({ 
-            map: shirtTex, 
-            roughness: 0.9, 
-            metalness: 0.05,
-            bumpMap: shirtTex, // Uses the weave pattern to create physical ridges!
-            bumpScale: 0.03
-        });
-        
-        const pantsTex = genFabric('#27272a', '#18181b', 3);
-        const pantsMat = new THREE.MeshStandardMaterial({ 
-            map: pantsTex, 
-            roughness: 0.95, 
-            metalness: 0.0,
-            bumpMap: pantsTex, // Adds physical depth to the pants weave
-            bumpScale: 0.04
-        });
+        const faceMat = new THREE.MeshBasicMaterial({ color: 0x000000 }); // Black for face features
 
-        // Hands (Skin)
-        handLeftMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), skinMat); scene.add(handLeftMesh);
-        handRightMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), skinMat); scene.add(handRightMesh);
+        // Hands (Small spheres)
+        handLeftMesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), stickMat); scene.add(handLeftMesh);
+        handRightMesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), stickMat); scene.add(handRightMesh);
         
-        // Realistic Human Head (Smooth sphere with skin)
-        headMesh = new THREE.Mesh(new THREE.SphereGeometry(3.5, 32, 32), skinMat);
+        // Head (White sphere)
+        headMesh = new THREE.Mesh(new THREE.SphereGeometry(2.5, 32, 32), stickMat);
         headMesh.castShadow = true;
         scene.add(headMesh);
 
-        // Cylinders to represent clothing and body parts
-        const createLimb = (rTop, rBot, material) => {
+        // Face Features (Eyes)
+        eyeLMesh = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), faceMat); scene.add(eyeLMesh);
+        eyeRMesh = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), faceMat); scene.add(eyeRMesh);
+
+        // Cylinders to represent thin stick limbs
+        const createLimb = () => {
             const mesh = new THREE.Group();
-            const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, 1, 16), material);
+            const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1, 8), stickMat);
             cylinder.castShadow = true;
             mesh.add(cylinder);
             scene.add(mesh);
@@ -523,21 +463,27 @@
         };
 
         bodyBones = {
-            // Neck (Connects shoulders to head)
-            neck: createLimb(1.0, 1.2, skinMat),
+            // Neck
+            neck: createLimb(),
 
-            // Arms (Shirt -> Skin)
-            leftUpper: createLimb(1.6, 1.4, shirtMat), leftLower: createLimb(1.3, 1.0, skinMat),
-            rightUpper: createLimb(1.6, 1.4, shirtMat), rightLower: createLimb(1.3, 1.0, skinMat),
+            // Arms
+            leftUpper: createLimb(), leftLower: createLimb(),
+            rightUpper: createLimb(), rightLower: createLimb(),
             
-            // Torso (Shirt)
-            torsoTop: createLimb(3.0, 2.8, shirtMat), torsoBottom: createLimb(2.8, 2.8, shirtMat),
-            torsoLeft: createLimb(2.0, 2.0, shirtMat), torsoRight: createLimb(2.0, 2.0, shirtMat),
+            // Torso (Square connecting shoulders and hips)
+            torsoTop: createLimb(), torsoBottom: createLimb(),
+            torsoLeft: createLimb(), torsoRight: createLimb(),
             
-            // Legs (Pants)
-            leftUpperLeg: createLimb(2.2, 1.8, pantsMat), leftLowerLeg: createLimb(1.8, 1.2, pantsMat),
-            rightUpperLeg: createLimb(2.2, 1.8, pantsMat), rightLowerLeg: createLimb(1.8, 1.2, pantsMat)
+            // Legs
+            leftUpperLeg: createLimb(), leftLowerLeg: createLimb(),
+            rightUpperLeg: createLimb(), rightLowerLeg: createLimb(),
+
+            // The Mouth!
+            mouth: createLimb() 
         };
+        
+        // Color the mouth bone black
+        bodyBones.mouth.children[0].material = faceMat;
 
         // Graphics: Realistic Pistol
         pistolMesh = new THREE.Group();
@@ -822,8 +768,24 @@
         // 3. Sync Graphics with Physics
         handLeftMesh.position.copy(handLeftBody.position);
         handRightMesh.position.copy(handRightBody.position);
-        headMesh.position.copy(headBody.position);
         
+        // Push head back slightly (-Z) so the nose, eyes, and mouth sit perfectly on the front surface!
+        headMesh.position.copy(headBody.position).add(new THREE.Vector3(0, 0, -1.8));
+        
+        // Sync Face Features
+        eyeLMesh.position.copy(POSE3D.eyeL);
+        eyeRMesh.position.copy(POSE3D.eyeR);
+        
+        // Make the mouth slightly thicker (0.4 scale) so it stands out
+        const mouthBone = bodyBones.mouth.children[0];
+        mouthBone.scale.set(1.5, mouthBone.scale.y, 1.5); 
+        
+        // Connect the mouth bone from the left mouth corner to the right mouth corner
+        const distance = POSE3D.mouthL.distanceTo(POSE3D.mouthR);
+        mouthBone.scale.y = distance;
+        bodyBones.mouth.position.copy(POSE3D.mouthL).lerp(POSE3D.mouthR, 0.5);
+        bodyBones.mouth.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), POSE3D.mouthR.clone().sub(POSE3D.mouthL).normalize());
+
         pistolMesh.position.copy(pistolBody.position);
         pistolMesh.quaternion.copy(pistolBody.quaternion);
 
