@@ -120,7 +120,9 @@
         leftHip: new THREE.Vector3(), rightHip: new THREE.Vector3(),
         leftKnee: new THREE.Vector3(), rightKnee: new THREE.Vector3(),
         leftAnkle: new THREE.Vector3(), rightAnkle: new THREE.Vector3(),
-        eyeL: new THREE.Vector3(), eyeR: new THREE.Vector3(), mouthL: new THREE.Vector3(), mouthR: new THREE.Vector3()
+        eyeL: new THREE.Vector3(), eyeR: new THREE.Vector3(), mouthL: new THREE.Vector3(), mouthR: new THREE.Vector3(),
+        leftPinky: new THREE.Vector3(), leftIndex: new THREE.Vector3(), leftThumb: new THREE.Vector3(),
+        rightPinky: new THREE.Vector3(), rightIndex: new THREE.Vector3(), rightThumb: new THREE.Vector3()
     };
 
     // Pose Targets mapped to 3D space
@@ -132,6 +134,8 @@
         leftKnee: new THREE.Vector3(), rightKnee: new THREE.Vector3(),
         leftAnkle: new THREE.Vector3(), rightAnkle: new THREE.Vector3(),
         eyeL: new THREE.Vector3(), eyeR: new THREE.Vector3(), mouthL: new THREE.Vector3(), mouthR: new THREE.Vector3(),
+        leftPinky: new THREE.Vector3(), leftIndex: new THREE.Vector3(), leftThumb: new THREE.Vector3(),
+        rightPinky: new THREE.Vector3(), rightIndex: new THREE.Vector3(), rightThumb: new THREE.Vector3(),
         leftShoot: false, rightShoot: false,
         visible: false
     };
@@ -311,6 +315,14 @@
                 RAW_TARGETS.mouthL.copy(map3D(10, 2)); 
                 RAW_TARGETS.mouthR.copy(map3D(9, 2));  
 
+                // Finger Tracking
+                RAW_TARGETS.rightPinky.copy(map3D(17));
+                RAW_TARGETS.rightIndex.copy(map3D(19));
+                RAW_TARGETS.rightThumb.copy(map3D(21));
+                RAW_TARGETS.leftPinky.copy(map3D(18));
+                RAW_TARGETS.leftIndex.copy(map3D(20));
+                RAW_TARGETS.leftThumb.copy(map3D(22));
+
                 // Shoot Detection
                 const getDist2D = (idx1, idx2) => Math.hypot(lm[idx1].x - lm[idx2].x, lm[idx1].y - lm[idx2].y);
                 POSE3D.rightShoot = getDist2D(15, 19) < 0.05;
@@ -453,10 +465,10 @@
         eyeLMesh = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), faceMat); scene.add(eyeLMesh);
         eyeRMesh = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), faceMat); scene.add(eyeRMesh);
 
-        // Cylinders to represent thin stick limbs
-        const createLimb = () => {
+        // Cylinders to represent thin stick limbs (added thickness parameter for smaller fingers)
+        const createLimb = (thickness = 0.3) => {
             const mesh = new THREE.Group();
-            const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1, 8), stickMat);
+            const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(thickness, thickness, 1, 8), stickMat);
             cylinder.castShadow = true;
             mesh.add(cylinder);
             scene.add(mesh);
@@ -468,6 +480,10 @@
             leftUpper: createLimb(), leftLower: createLimb(),
             rightUpper: createLimb(), rightLower: createLimb(),
             
+            // Fingers
+            leftPinky: createLimb(0.15), leftIndex: createLimb(0.15), leftThumb: createLimb(0.15),
+            rightPinky: createLimb(0.15), rightIndex: createLimb(0.15), rightThumb: createLimb(0.15),
+
             // Torso (Square connecting shoulders and hips)
             torsoTop: createLimb(), torsoBottom: createLimb(),
             torsoLeft: createLimb(), torsoRight: createLimb(),
@@ -692,6 +708,14 @@
             updateBone(bodyBones.rightUpper, POSE3D.rightShoulder, POSE3D.rightElbow);
             updateBone(bodyBones.rightLower, POSE3D.rightElbow, POSE3D.right);
             
+            // Fingers
+            updateBone(bodyBones.leftPinky, POSE3D.left, POSE3D.leftPinky);
+            updateBone(bodyBones.leftIndex, POSE3D.left, POSE3D.leftIndex);
+            updateBone(bodyBones.leftThumb, POSE3D.left, POSE3D.leftThumb);
+            updateBone(bodyBones.rightPinky, POSE3D.right, POSE3D.rightPinky);
+            updateBone(bodyBones.rightIndex, POSE3D.right, POSE3D.rightIndex);
+            updateBone(bodyBones.rightThumb, POSE3D.right, POSE3D.rightThumb);
+
             // Torso (Square connecting shoulders and hips)
             updateBone(bodyBones.torsoTop, POSE3D.leftShoulder, POSE3D.rightShoulder);
             updateBone(bodyBones.torsoBottom, POSE3D.leftHip, POSE3D.rightHip);
@@ -766,19 +790,24 @@
         // Push head back slightly (-Z) so the nose, eyes, and mouth sit perfectly on the front surface of the block head!
         headMesh.position.copy(headBody.position).add(new THREE.Vector3(0, 0, -2.0));
         
-        // Sync Face Features
-        eyeLMesh.position.copy(POSE3D.eyeL);
-        eyeRMesh.position.copy(POSE3D.eyeR);
+        // Sync Face Features (Lock Z exactly to the front of the head cube to fix glitching)
+        const faceZ = headMesh.position.z + 2.1; // 2.0 is half the box depth + 0.1 padding
+
+        eyeLMesh.position.copy(POSE3D.eyeL); eyeLMesh.position.z = faceZ;
+        eyeRMesh.position.copy(POSE3D.eyeR); eyeRMesh.position.z = faceZ;
         
         // Make the mouth slightly thicker (0.4 scale) so it stands out
+        const mouthPosL = POSE3D.mouthL.clone(); mouthPosL.z = faceZ;
+        const mouthPosR = POSE3D.mouthR.clone(); mouthPosR.z = faceZ;
+
         const mouthBone = bodyBones.mouth.children[0];
         mouthBone.scale.set(1.5, mouthBone.scale.y, 1.5); 
         
         // Connect the mouth bone from the left mouth corner to the right mouth corner
-        const distance = POSE3D.mouthL.distanceTo(POSE3D.mouthR);
+        const distance = mouthPosL.distanceTo(mouthPosR);
         mouthBone.scale.y = distance;
-        bodyBones.mouth.position.copy(POSE3D.mouthL).lerp(POSE3D.mouthR, 0.5);
-        bodyBones.mouth.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), POSE3D.mouthR.clone().sub(POSE3D.mouthL).normalize());
+        bodyBones.mouth.position.copy(mouthPosL).lerp(mouthPosR, 0.5);
+        bodyBones.mouth.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), mouthPosR.clone().sub(mouthPosL).normalize());
 
         pistolMesh.position.copy(pistolBody.position);
         pistolMesh.quaternion.copy(pistolBody.quaternion);
