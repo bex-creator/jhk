@@ -132,38 +132,17 @@
     // NETWORKING (PEERJS) - PHONE TO PC
     // ==========================================
     
-    document.getElementById('btn_host').addEventListener('click', () => initHost());
+    document.getElementById('btn_host').addEventListener('click', () => initHost(false));
     document.getElementById('btn_join').addEventListener('click', () => {
         uiMain.classList.add('hidden');
         uiJoin.classList.remove('hidden');
     });
     document.getElementById('btn_solo').addEventListener('click', () => startPCWebcam());
-    document.getElementById('btn_fps').addEventListener('click', () => startFPSMode());
-
-    function startFPSMode() {
-        STATE.isFPS = true;
-        uiMain.classList.add('hidden');
-        uiHud.classList.remove('hidden');
-        document.getElementById('crosshair').classList.remove('hidden');
-        canvas.classList.remove('hidden');
-        
-        document.querySelector('#ui_hud div:nth-child(2)').innerHTML = `Target Range Mode.<br><b>POINT</b> your arm to aim the laser.<br><b>SQUEEZE</b> your hand to shoot!`;
-        
-        // Start engine with PC webcam instantly for FPS if not joined
-        if (!mediaStream && !peer) {
-            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }})
-            .then(stream => {
-                vidRecv.srcObject = stream;
-                startEngine(vidRecv);
-            }).catch(() => alert("No webcam found."));
-        } else {
-            // Already connected via phone
-            startEngine(vidRecv);
-        }
-    }
+    document.getElementById('btn_fps').addEventListener('click', () => initHost(true));
 
     // --- PC HOST MODE ---
-    function initHost() {
+    function initHost(isFPS) {
+        STATE.isFPS = isFPS;
         uiMain.classList.add('hidden');
         uiHost.classList.remove('hidden');
         
@@ -231,6 +210,7 @@
 
     // --- PC SOLO MODE (Fallback) ---
     async function startPCWebcam() {
+        STATE.isFPS = false; // Default to AR mode for PC webcam fallback
         uiMain.classList.add('hidden');
         try {
             mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }});
@@ -247,11 +227,23 @@
     // ==========================================
     function startEngine(videoSource) {
         uiHost.classList.add('hidden');
+        uiMain.classList.add('hidden');
         uiHud.classList.remove('hidden');
         canvas.classList.remove('hidden');
         
+        if (STATE.isFPS) {
+            document.getElementById('crosshair').classList.remove('hidden');
+            document.querySelector('#ui_hud div:nth-child(2)').innerHTML = `Target Range Mode.<br><b>POINT</b> your arm to aim the laser.<br><b>SQUEEZE</b> your hand to shoot!`;
+        } else {
+            document.getElementById('crosshair').classList.add('hidden');
+            document.querySelector('#ui_hud div:nth-child(2)').innerHTML = `You are holding a pistol.<br><b>POINT</b> your arm to aim.<br><b>SQUEEZE</b> your hand to shoot!`;
+        }
+        
         // Init 3D World first
         init3D();
+        
+        // Spawn initial targets for FPS mode
+        if (STATE.isFPS) spawnTargets(15);
         
         // Init AI
         pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
