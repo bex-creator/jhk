@@ -19,15 +19,20 @@
 
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #020617; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; }
-        #game_canvas { display: block; position: absolute; top: 0; left: 0; z-index: 10; width: 100%; height: 100%; }
+        #game_canvas { display: block; position: absolute; top: 0; left: 0; z-index: 10; width: 100%; height: 100%; background: transparent; }
         .layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .hidden { display: none !important; }
-        /* Video is hidden on PC, shown full screen on phone */
+        /* Video elements */
         #received_video, #local_video { display: none; }
         .phone-video-active { display: block !important; position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 5; opacity: 0.5; }
+        /* AR Background Feed */
+        #video_bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; transform: scaleX(-1); }
     </style>
 </head>
 <body>
+
+    <!-- AR Background Video -->
+    <video id="video_bg" autoplay playsinline class="hidden"></video>
 
     <!-- Videos for WebRTC -->
     <video id="received_video" autoplay playsinline></video>
@@ -106,14 +111,24 @@
     let lastTime = 0;
     let lastShootTime = 0;
 
+    // Smooth Tracking Targets
+    const RAW_TARGETS = {
+        left: new THREE.Vector3(), right: new THREE.Vector3(), head: new THREE.Vector3(), 
+        leftElbow: new THREE.Vector3(), rightElbow: new THREE.Vector3(), 
+        leftShoulder: new THREE.Vector3(), rightShoulder: new THREE.Vector3(),
+        leftHip: new THREE.Vector3(), rightHip: new THREE.Vector3(),
+        leftKnee: new THREE.Vector3(), rightKnee: new THREE.Vector3(),
+        leftAnkle: new THREE.Vector3(), rightAnkle: new THREE.Vector3()
+    };
+
     // Pose Targets mapped to 3D space
     const POSE3D = {
-        left: null, right: null, head: null, 
-        leftElbow: null, rightElbow: null, 
-        leftShoulder: null, rightShoulder: null,
-        leftHip: null, rightHip: null,
-        leftKnee: null, rightKnee: null,
-        leftAnkle: null, rightAnkle: null,
+        left: new THREE.Vector3(), right: new THREE.Vector3(), head: new THREE.Vector3(), 
+        leftElbow: new THREE.Vector3(), rightElbow: new THREE.Vector3(), 
+        leftShoulder: new THREE.Vector3(), rightShoulder: new THREE.Vector3(),
+        leftHip: new THREE.Vector3(), rightHip: new THREE.Vector3(),
+        leftKnee: new THREE.Vector3(), rightKnee: new THREE.Vector3(),
+        leftAnkle: new THREE.Vector3(), rightAnkle: new THREE.Vector3(),
         leftShoot: false, rightShoot: false,
         visible: false
     };
@@ -231,6 +246,8 @@
         uiHud.classList.remove('hidden');
         canvas.classList.remove('hidden');
         
+        const vidBg = document.getElementById('video_bg');
+
         if (STATE.isFPS) {
             document.getElementById('crosshair').classList.remove('hidden');
             document.querySelector('#ui_hud div:nth-child(2)').innerHTML = `Target Range Mode.<br><b>POINT</b> your arm to aim the laser.<br><b>SQUEEZE</b> your hand to shoot!`;
@@ -238,6 +255,9 @@
             document.getElementById('crosshair').classList.add('hidden');
             document.querySelector('#ui_hud div:nth-child(2)').innerHTML = `You are holding a pistol.<br><b>POINT</b> your arm to aim.<br><b>SQUEEZE</b> your hand to shoot!`;
         }
+        
+        // Force background video to stay hidden (Virtual Game Background instead of AR)
+        vidBg.classList.add('hidden');
         
         // Init 3D World first
         init3D();
@@ -257,38 +277,39 @@
                 POSE3D.visible = true;
                 const lm = results.poseLandmarks;
                 
-                // Map 2D landmarks to 3D space. Scaled up to fit a full body.
-                // INCREASED Z-DEPTH MULTIPLIER to make pushing arms forward more realistic
+                // Map 2D landmarks to RAW targets first
                 const map3D = (idx, yOffset = 0) => {
                     return new THREE.Vector3(
-                        -(lm[idx].x - 0.5) * 45, // Mirrored X, scaled wider
-                        -(lm[idx].y - 0.5) * 40 + 20 + yOffset, // Inverted Y, scaled for full body
-                        (lm[idx].z || 0) * -45 // Enhanced Z depth for better aiming
+                        -(lm[idx].x - 0.5) * 45, 
+                        -(lm[idx].y - 0.5) * 40 + 20 + yOffset, 
+                        (lm[idx].z || 0) * -45 
                     );
                 };
 
-                POSE3D.head = map3D(0, 5); // Nose, shift up slightly
-                POSE3D.right = map3D(15);  
-                POSE3D.left = map3D(16);   
-                POSE3D.rightElbow = map3D(13);
-                POSE3D.leftElbow = map3D(14);
-                POSE3D.rightShoulder = map3D(11);
-                POSE3D.leftShoulder = map3D(12);
+                RAW_TARGETS.head.copy(map3D(0, 5)); 
+                RAW_TARGETS.right.copy(map3D(15));  
+                RAW_TARGETS.left.copy(map3D(16));   
+                RAW_TARGETS.rightElbow.copy(map3D(13));
+                RAW_TARGETS.leftElbow.copy(map3D(14));
+                RAW_TARGETS.rightShoulder.copy(map3D(11));
+                RAW_TARGETS.leftShoulder.copy(map3D(12));
                 
-                // New Full Body Landmarks
-                POSE3D.rightHip = map3D(23);
-                POSE3D.leftHip = map3D(24);
-                POSE3D.rightKnee = map3D(25);
-                POSE3D.leftKnee = map3D(26);
-                POSE3D.rightAnkle = map3D(27);
-                POSE3D.leftAnkle = map3D(28);
+                RAW_TARGETS.rightHip.copy(map3D(23));
+                RAW_TARGETS.leftHip.copy(map3D(24));
+                RAW_TARGETS.rightKnee.copy(map3D(25));
+                RAW_TARGETS.leftKnee.copy(map3D(26));
+                RAW_TARGETS.rightAnkle.copy(map3D(27));
+                RAW_TARGETS.leftAnkle.copy(map3D(28));
 
-                // Shoot Detection (Distance between wrist and index knuckle)
+                // Shoot Detection
                 const getDist2D = (idx1, idx2) => Math.hypot(lm[idx1].x - lm[idx2].x, lm[idx1].y - lm[idx2].y);
-                
-                // Finger curls/holds down = landmarks move closer together to form a fist/trigger pull
                 POSE3D.rightShoot = getDist2D(15, 19) < 0.05;
                 POSE3D.leftShoot = getDist2D(16, 20) < 0.05;
+
+                // Initial snap if they were far away (prevents ghost sliding from 0,0,0)
+                if (POSE3D.head.distanceTo(RAW_TARGETS.head) > 20) {
+                    for(let key in RAW_TARGETS) POSE3D[key].copy(RAW_TARGETS[key]);
+                }
 
             } else {
                 POSE3D.visible = false;
@@ -357,13 +378,17 @@
 
         // --- 2. Graphics Setup (Three.js) ---
         scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020617, 0.015);
+        
+        // Virtual Game Background (Dark Sci-Fi Arena)
+        scene.background = new THREE.Color(0x0f172a); // Slate 900
+        scene.fog = new THREE.FogExp2(0x0f172a, 0.015);
 
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 20, 45); 
         camera.lookAt(0, 15, 0);
 
-        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+        // Removed alpha: true so the background renders as a solid game world
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
 
@@ -387,62 +412,75 @@
         window.spotLight = spotLight; 
 
         // Graphics: Environment Grid
-        const gridHelper = new THREE.GridHelper(200, 100, 0x06b6d4, 0x0f172a);
+        // Bold glowing grid for the virtual training room
+        const gridHelper = new THREE.GridHelper(200, 100, 0x0ea5e9, 0x020617);
         gridHelper.position.y = 0;
         scene.add(gridHelper);
 
         // ==========================================
-        // REALISTIC AVATAR MATERIALS & MESHES
+        // REAL HUMAN TEXTURES & MATERIALS
         // ==========================================
-        // High-end tactical armor PBR material
-        const armorMat = new THREE.MeshPhysicalMaterial({ 
-            color: 0x0f172a, metalness: 0.8, roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.2 
+        
+        // Generate procedural textures to make them look real (pores, fabric weave)
+        const genTexture = (baseColor, dotColor, scale=1) => {
+            const cvs = document.createElement('canvas');
+            cvs.width = 128; cvs.height = 128;
+            const ctx = cvs.getContext('2d');
+            ctx.fillStyle = baseColor; ctx.fillRect(0,0,128,128);
+            for(let i=0; i<3000; i++) {
+                ctx.fillStyle = dotColor;
+                ctx.fillRect(Math.random()*128, Math.random()*128, scale, scale);
+            }
+            const tex = new THREE.CanvasTexture(cvs);
+            tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+            return tex;
+        };
+
+        // Realistic Materials
+        const skinMat = new THREE.MeshStandardMaterial({ 
+            map: genTexture('#fcd34d', '#f59e0b', 1), // Skin tone with slight pore texture
+            roughness: 0.6, metalness: 0.1 
         });
-        const glowMat = new THREE.MeshStandardMaterial({ 
-            color: 0x0ea5e9, emissive: 0x0ea5e9, emissiveIntensity: 2.0 
+        const shirtMat = new THREE.MeshStandardMaterial({ 
+            map: genTexture('#1e40af', '#172554', 2), // Blue denim/fabric texture
+            roughness: 0.9, metalness: 0.0 
+        });
+        const pantsMat = new THREE.MeshStandardMaterial({ 
+            map: genTexture('#374151', '#1f2937', 2), // Dark grey slacks texture
+            roughness: 0.9, metalness: 0.0 
         });
 
-        // Hands
-        handLeftMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), armorMat); scene.add(handLeftMesh);
-        handRightMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), armorMat); scene.add(handRightMesh);
+        // Hands (Skin)
+        handLeftMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), skinMat); scene.add(handLeftMesh);
+        handRightMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), skinMat); scene.add(handRightMesh);
         
-        // Realistic Helmet Head
-        headMesh = new THREE.Group();
-        const helmet = new THREE.Mesh(new THREE.BoxGeometry(4, 5, 4.5), armorMat);
-        // Visor
-        const visor = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.5, 4.6), glowMat);
-        visor.position.set(0, 0.5, 0);
-        helmet.add(visor);
-        headMesh.add(helmet);
+        // Realistic Human Head (Smooth sphere with skin)
+        headMesh = new THREE.Mesh(new THREE.SphereGeometry(3.5, 32, 32), skinMat);
+        headMesh.castShadow = true;
         scene.add(headMesh);
 
-        // Thick, Exoskeleton-style tapered bones
-        const createExoBone = (rTop, rBot) => {
+        // Cylinders to represent clothing and body parts
+        const createLimb = (rTop, rBot, material) => {
             const mesh = new THREE.Group();
-            const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, 1, 16), armorMat);
+            const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, 1, 16), material);
             cylinder.castShadow = true;
             mesh.add(cylinder);
-            
-            // Add glowing rings to joints for sci-fi look
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(rTop + 0.1, 0.1, 8, 16), glowMat);
-            ring.rotation.x = Math.PI/2;
-            ring.position.y = 0.4;
-            mesh.add(ring);
-            
             scene.add(mesh);
             return mesh;
         };
 
         bodyBones = {
-            // Arms (Tapered down to wrist)
-            leftUpper: createExoBone(1.4, 1.0), leftLower: createExoBone(1.0, 0.8),
-            rightUpper: createExoBone(1.4, 1.0), rightLower: createExoBone(1.0, 0.8),
-            // Torso Frame
-            torsoTop: createExoBone(2.5, 2.5), torsoBottom: createExoBone(2.0, 2.0),
-            torsoLeft: createExoBone(1.5, 1.5), torsoRight: createExoBone(1.5, 1.5),
-            // Legs (Thick thighs tapering to ankles)
-            leftUpperLeg: createExoBone(1.8, 1.3), leftLowerLeg: createExoBone(1.3, 1.0),
-            rightUpperLeg: createExoBone(1.8, 1.3), rightLowerLeg: createExoBone(1.3, 1.0)
+            // Arms (Shirt -> Skin)
+            leftUpper: createLimb(1.6, 1.4, shirtMat), leftLower: createLimb(1.3, 1.0, skinMat),
+            rightUpper: createLimb(1.6, 1.4, shirtMat), rightLower: createLimb(1.3, 1.0, skinMat),
+            
+            // Torso (Shirt)
+            torsoTop: createLimb(3.0, 2.8, shirtMat), torsoBottom: createLimb(2.8, 2.8, shirtMat),
+            torsoLeft: createLimb(2.0, 2.0, shirtMat), torsoRight: createLimb(2.0, 2.0, shirtMat),
+            
+            // Legs (Pants)
+            leftUpperLeg: createLimb(2.2, 1.8, pantsMat), leftLowerLeg: createLimb(1.8, 1.2, pantsMat),
+            rightUpperLeg: createLimb(2.2, 1.8, pantsMat), rightLowerLeg: createLimb(1.8, 1.2, pantsMat)
         };
 
         // Graphics: Realistic Pistol
@@ -616,6 +654,14 @@
         // 2. Update Kinematic Player Bodies from AI
         if (POSE3D.visible) {
             
+            // SMOOTH TRACKING (LERP)
+            // Gently interpolates current visual bones towards the raw AI tracking targets
+            // This completely eliminates AI tracking jitter!
+            const smoothFactor = 0.4;
+            for(let key in RAW_TARGETS) {
+                POSE3D[key].lerp(RAW_TARGETS[key], smoothFactor);
+            }
+
             // Smoothly move physics bodies towards target (Kinematic velocity approach)
             const approach = (body, target) => {
                 const dx = target.x - body.position.x;
@@ -677,9 +723,11 @@
                 let isShooting = (STATE.activeHand === 'right' && POSE3D.rightShoot) || 
                                  (STATE.activeHand === 'left' && POSE3D.leftShoot);
 
-                // Glow hands red when shooting
-                handLeftMesh.material.emissive.setHex(POSE3D.leftShoot ? 0xef4444 : 0x1e293b);
-                handRightMesh.material.emissive.setHex(POSE3D.rightShoot ? 0xef4444 : 0x1e293b);
+                // Flash hands slightly when shooting
+                handLeftMesh.material.emissiveIntensity = POSE3D.leftShoot ? 0.5 : 0;
+                handLeftMesh.material.emissive.setHex(0xff0000);
+                handRightMesh.material.emissiveIntensity = POSE3D.rightShoot ? 0.5 : 0;
+                handRightMesh.material.emissive.setHex(0xff0000);
 
                 // Auto-shoot if pulling the trigger (fires every 250ms)
                 if (isShooting && time - lastShootTime > 250) {
