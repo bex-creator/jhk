@@ -67,6 +67,8 @@
                         <button onclick="startGame('sumo')" class="game-btn bg-orange-600 hover:bg-orange-500 py-3 rounded-lg font-bold">Sumo Smash</button>
                         <button onclick="startGame('shooter')" class="game-btn bg-red-600 hover:bg-red-500 py-3 rounded-lg font-bold">Blaster</button>
                         <button onclick="startGame('tag')" class="game-btn bg-teal-600 hover:bg-teal-500 py-3 rounded-lg font-bold">Crown Tag</button>
+                        <button onclick="startGame('classictag')" class="game-btn bg-pink-600 hover:bg-pink-500 py-3 rounded-lg font-bold">Classic Tag</button>
+                        <button onclick="startGame('gartic')" class="game-btn bg-indigo-600 hover:bg-indigo-500 py-3 rounded-lg font-bold">Gartic Phone</button>
                     </div>
                 </div>
 
@@ -81,19 +83,29 @@
         <div id="screen-game" class="hidden w-full h-full flex flex-col items-center justify-center">
             
             <!-- Contextual Game UI overlay (scores etc) -->
-            <div id="game-ui" class="absolute top-20 flex gap-6 text-xl font-bold bg-slate-800/80 px-6 py-2 rounded-full backdrop-blur-sm z-10">
+            <div id="game-ui" class="absolute top-20 flex gap-6 text-xl font-bold bg-slate-800/80 px-6 py-2 rounded-full backdrop-blur-sm z-10 pointer-events-none">
                 <!-- Scores injected here -->
             </div>
 
-            <!-- The 5 Different Canvases -->
+            <!-- Gartic Phone Text Input Overlay -->
+            <div id="game-overlay" class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-slate-800 p-6 rounded-xl border border-slate-600 flex flex-col gap-4 items-center hidden z-20 w-11/12 max-w-lg shadow-2xl">
+                <h3 id="overlay-prompt" class="text-2xl font-bold text-yellow-400 text-center"></h3>
+                <input type="text" id="overlay-input" class="w-full p-3 text-black rounded text-lg font-bold outline-none focus:ring-4 focus:ring-blue-500" autocomplete="off" placeholder="Type here...">
+                <button id="overlay-btn" class="bg-blue-600 hover:bg-blue-500 w-full py-3 rounded font-bold text-white text-xl transition shadow-lg">Submit</button>
+            </div>
+
+            <!-- The 7 Different Canvases -->
             <canvas id="canvas-tron" width="800" height="600"></canvas>
             <canvas id="canvas-dash" width="800" height="600"></canvas>
             <canvas id="canvas-sumo" width="800" height="600"></canvas>
             <canvas id="canvas-shooter" width="800" height="600"></canvas>
             <canvas id="canvas-tag" width="800" height="600"></canvas>
+            <canvas id="canvas-classictag" width="800" height="600"></canvas>
+            <canvas id="canvas-gartic" width="800" height="600" class="cursor-crosshair"></canvas>
 
-            <div class="mt-4 text-slate-400 text-sm">
-                Controls: <kbd class="bg-slate-700 px-2 py-1 rounded">W A S D</kbd> or <kbd class="bg-slate-700 px-2 py-1 rounded">Arrows</kbd> to move. <kbd class="bg-slate-700 px-2 py-1 rounded">Space</kbd> to action/shoot.
+            <div class="mt-4 text-slate-400 text-sm text-center">
+                Controls: <kbd class="bg-slate-700 px-2 py-1 rounded">W A S D</kbd> or <kbd class="bg-slate-700 px-2 py-1 rounded">Arrows</kbd> to move. <kbd class="bg-slate-700 px-2 py-1 rounded">Space</kbd> to action/shoot.<br>
+                Gartic Phone: Use your <kbd class="bg-slate-700 px-2 py-1 rounded">Mouse</kbd> to draw and keyboard to type!
             </div>
         </div>
 
@@ -122,9 +134,13 @@
 
         // Local Input
         const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false, ' ': false };
-        let myInput = { up: false, down: false, left: false, right: false, action: false };
+        let myInput = { up: false, down: false, left: false, right: false, action: false, mx: 0, my: 0, md: false };
+        let mouseX = 0, mouseY = 0, mouseDown = false;
+        let lastMouseSync = 0;
+        let lastOverlayState = "";
         let currentRoomIndex = 1;
         const MAX_ROOMS = 50; // Max public matchmaking slots
+        let nextPlayerIndex = 0; // Ensures IDs don't conflict on reconnects
 
         // DOM Elements
         const ui = {
@@ -141,12 +157,20 @@
             btnLeave: document.getElementById('btn-leave'),
             btnQuickPlay: document.getElementById('btn-quick-play'),
             gameUi: document.getElementById('game-ui'),
+            overlay: {
+                container: document.getElementById('game-overlay'),
+                prompt: document.getElementById('overlay-prompt'),
+                input: document.getElementById('overlay-input'),
+                btn: document.getElementById('overlay-btn')
+            },
             canvases: {
                 tron: document.getElementById('canvas-tron'),
                 dash: document.getElementById('canvas-dash'),
                 sumo: document.getElementById('canvas-sumo'),
                 shooter: document.getElementById('canvas-shooter'),
-                tag: document.getElementById('canvas-tag')
+                tag: document.getElementById('canvas-tag'),
+                classictag: document.getElementById('canvas-classictag'),
+                gartic: document.getElementById('canvas-gartic')
             }
         };
 
@@ -164,12 +188,95 @@
                 hostConn.send({ type: 'INPUT', input: myInput });
             }
         }
+
+        const keyMap = { 
+            'w': 'w', 'a': 'a', 's': 's', 'd': 'd', ' ': ' ',
+            'arrowup': 'ArrowUp', 'arrowdown': 'ArrowDown', 'arrowleft': 'ArrowLeft', 'arrowright': 'ArrowRight'
+        };
+
         window.addEventListener('keydown', e => { 
-            if (keys.hasOwnProperty(e.key) && !keys[e.key]) { keys[e.key] = true; updateInput(); }
+            // Ignore keystrokes if the user is typing in a chatbox
+            if (document.activeElement && document.activeElement.tagName === 'INPUT' && e.key !== 'Enter') return;
+            const k = keyMap[e.key.toLowerCase()] || e.key;
+            if (keys.hasOwnProperty(k) && !keys[k]) { keys[k] = true; updateInput(); }
         });
         window.addEventListener('keyup', e => { 
-            if (keys.hasOwnProperty(e.key)) { keys[e.key] = false; updateInput(); }
+            const k = keyMap[e.key.toLowerCase()] || e.key;
+            if (keys.hasOwnProperty(k)) { keys[k] = false; updateInput(); }
         });
+
+        function syncMouse() {
+            myInput.mx = mouseX;
+            myInput.my = mouseY;
+            myInput.md = mouseDown;
+            if (isHost && myId) {
+                playerInputs[playersMap[myId]] = { ...myInput };
+            } else if (!isHost && hostConn && hostConn.open) {
+                const now = Date.now();
+                if (now - lastMouseSync > 30) {
+                    hostConn.send({ type: 'INPUT', input: myInput });
+                    lastMouseSync = now;
+                }
+            }
+        }
+
+        Object.values(ui.canvases).forEach(canvas => {
+            canvas.addEventListener('mousemove', e => {
+                const rect = canvas.getBoundingClientRect();
+                mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+                mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+                syncMouse();
+            });
+            canvas.addEventListener('mousedown', () => { mouseDown = true; syncMouse(); });
+            canvas.addEventListener('mouseup', () => { mouseDown = false; syncMouse(); });
+            canvas.addEventListener('mouseleave', () => { mouseDown = false; syncMouse(); });
+        });
+
+        function submitText() {
+            const val = ui.overlay.input.value.trim();
+            if (val) {
+                sendCmd({ type: 'text', val: val });
+                ui.overlay.input.value = '';
+                toggleOverlay(false);
+            }
+        }
+        ui.overlay.btn.addEventListener('click', submitText);
+        ui.overlay.input.addEventListener('keydown', e => { if (e.key === 'Enter') submitText(); });
+
+        function sendCmd(cmd) {
+            if (isHost && myId) {
+                processCommand(playersMap[myId], cmd);
+            } else if (hostConn && hostConn.open) {
+                hostConn.send({ type: 'CMD', cmd: cmd });
+            }
+        }
+
+        function processCommand(pIdx, cmd) {
+            if (currentGame && Games[currentGame].handleCmd) {
+                Games[currentGame].handleCmd(gameState, pIdx, cmd);
+            }
+        }
+
+        function toggleOverlay(show, prompt = "", needsInput = false) {
+            const stateStr = `${show}-${prompt}-${needsInput}`;
+            if (lastOverlayState === stateStr) return;
+            lastOverlayState = stateStr;
+            
+            if (show) {
+                ui.overlay.container.classList.remove('hidden');
+                ui.overlay.prompt.innerText = prompt;
+                if (needsInput) {
+                    ui.overlay.input.classList.remove('hidden');
+                    ui.overlay.btn.classList.remove('hidden');
+                    ui.overlay.input.focus();
+                } else {
+                    ui.overlay.input.classList.add('hidden');
+                    ui.overlay.btn.classList.add('hidden');
+                }
+            } else {
+                ui.overlay.container.classList.add('hidden');
+            }
+        }
 
         // --- NETWORK & MATCHMAKING SETUP ---
         document.getElementById('btn-quick-play').addEventListener('click', () => {
@@ -297,6 +404,8 @@
                 conn.on('data', data => {
                     if (data.type === 'INPUT') {
                         playerInputs[playersMap[conn.peer]] = data.input;
+                    } else if (data.type === 'CMD') {
+                        processCommand(playersMap[conn.peer], data.cmd);
                     }
                 });
 
@@ -356,25 +465,16 @@
 
         // --- ROOM MANAGEMENT ---
         function addPlayer(id) {
-            const currentCount = Object.keys(playersMap).length;
-            playersMap[id] = currentCount; // Assign index 0-3
-            playerInputs[currentCount] = { up: false, down: false, left: false, right: false, action: false };
+            playersMap[id] = nextPlayerIndex; // Assign fixed index per session
+            playerInputs[nextPlayerIndex] = { up: false, down: false, left: false, right: false, action: false, mx: 0, my: 0, md: false };
+            nextPlayerIndex++;
             updatePlayerListUI();
         }
 
         function removePlayer(id) {
+            const index = playersMap[id];
             delete playersMap[id];
-            // Re-index remaining players to ensure contiguous 0-N
-            let i = 0;
-            const newMap = {};
-            const newInputs = {};
-            for (let peerId in playersMap) {
-                newMap[peerId] = i;
-                newInputs[i] = { up: false, down: false, left: false, right: false, action: false };
-                i++;
-            }
-            playersMap = newMap;
-            playerInputs = newInputs;
+            delete playerInputs[index]; // Do not re-index to preserve active game state!
             updatePlayerListUI();
         }
 
@@ -402,8 +502,8 @@
                 const idx = playersMap[id];
                 const badge = document.createElement('div');
                 badge.className = `px-4 py-2 rounded-full font-bold text-white shadow-md flex items-center gap-2`;
-                badge.style.backgroundColor = COLORS[idx];
-                badge.innerHTML = `P${idx + 1} ${id === myId ? '(You)' : ''} ${id === Object.keys(playersMap).find(key => playersMap[key]===0) ? '👑' : ''}`;
+                badge.style.backgroundColor = COLORS[idx % COLORS.length];
+                badge.innerHTML = `P${idx + 1} ${id === myId ? '(You)' : ''} ${id === sortedIds[0] ? '👑' : ''}`;
                 ui.playerList.appendChild(badge);
             });
         }
@@ -411,6 +511,7 @@
         function resetLobby() {
             if (peer) { peer.destroy(); peer = null; }
             myId = null; isHost = false; hostConn = null; clients = {}; playersMap = {}; playerInputs = {};
+            nextPlayerIndex = 0;
             stopGame();
             ui.screenGame.classList.add('hidden');
             ui.screenLobby.classList.remove('hidden');
@@ -435,6 +536,7 @@
             ui.screenLobby.classList.remove('hidden');
             ui.btnLeave.innerText = "Leave Room";
             currentGame = null;
+            toggleOverlay(false);
             // Clear all canvases
             Object.values(ui.canvases).forEach(canvas => {
                 const ctx = canvas.getContext('2d');
@@ -485,10 +587,11 @@
             
             // Update UI scores if applicable
             let uiHtml = '';
-            const pCount = Object.keys(playersMap).length;
-            for(let i=0; i<pCount; i++) {
-                if (state.scores && state.scores[i] !== undefined) {
-                    uiHtml += `<span style="color:${COLORS[i]}">P${i+1}: ${state.scores[i]}</span>`;
+            if (state.scores) {
+                for(let i=0; i<state.scores.length; i++) {
+                    if (state.scores[i] !== undefined) {
+                        uiHtml += `<span style="color:${COLORS[i % COLORS.length]}">P${i+1}: ${state.scores[i]}</span>`;
+                    }
                 }
             }
             ui.gameUi.innerHTML = uiHtml;
@@ -497,6 +600,21 @@
         // Helper Drawing Functions
         function drawRect(ctx, x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
         function drawCircle(ctx, x, y, r, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+        function drawGarticLines(ctx, lines) {
+            if (!lines || lines.length === 0) return;
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 5;
+            ctx.beginPath();
+            let isDrawing = false;
+            for (let i = 0; i < lines.length; i++) {
+                const pt = lines[i];
+                if (pt.md) {
+                    if (!isDrawing) { ctx.beginPath(); ctx.moveTo(pt.x, pt.y); isDrawing = true; ctx.strokeStyle = pt.c || '#fff'; } 
+                    else { ctx.lineTo(pt.x, pt.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(pt.x, pt.y); }
+                } else {
+                    isDrawing = false;
+                }
+            }
+        }
 
         // --- THE 5 GAMES IMPLEMENTATIONS ---
 
@@ -517,10 +635,10 @@
                     ];
                     for(let i=0; i<count; i++) {
                         state.players.push({
-                            x: startPos[i].x, y: startPos[i].y, dir: startPos[i].dir,
-                            alive: true, color: COLORS[i], id: i
+                            x: startPos[i % startPos.length].x, y: startPos[i % startPos.length].y, dir: startPos[i % startPos.length].dir,
+                            alive: true, color: COLORS[i % COLORS.length], id: i
                         });
-                        state.grid[startPos[i].x][startPos[i].y] = i;
+                        state.grid[startPos[i % startPos.length].x][startPos[i % startPos.length].y] = i;
                     }
                     return state;
                 },
@@ -535,7 +653,7 @@
                         aliveCount++;
                         lastAlive = p.id;
                         
-                        const inp = inputs[p.id];
+                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
                         // Prevent 180 degree turns
                         if (inp.up && p.dir !== 2) p.dir = 0;
                         else if (inp.right && p.dir !== 3) p.dir = 1;
@@ -568,7 +686,7 @@
                     for(let x=0; x<CANVAS_W/10; x++) {
                         for(let y=0; y<CANVAS_H/10; y++) {
                             if (state.grid[x][y] !== -1) {
-                                drawRect(ctx, x*10, y*10, 10, 10, COLORS[state.grid[x][y]]);
+                                drawRect(ctx, x*10, y*10, 10, 10, COLORS[state.grid[x][y] % COLORS.length]);
                             }
                         }
                     }
@@ -583,7 +701,7 @@
                     if (state.winner !== -1) {
                         ctx.fillStyle = "rgba(0,0,0,0.7)";
                         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-                        ctx.fillStyle = COLORS[state.winner] || '#fff';
+                        ctx.fillStyle = COLORS[state.winner % COLORS.length] || '#fff';
                         ctx.font = "40px sans-serif";
                         ctx.textAlign = "center";
                         ctx.fillText(state.winner !== -1 ? `Player ${state.winner+1} Wins!` : "Draw!", CANVAS_W/2, CANVAS_H/2);
@@ -606,7 +724,7 @@
                 update: function(state, inputs) {
                     const speed = 7;
                     state.players.forEach(p => {
-                        const inp = inputs[p.id];
+                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
                         if (inp.up) p.y -= speed;
                         if (inp.down) p.y += speed;
                         if (inp.left) p.x -= speed;
@@ -636,7 +754,7 @@
 
                     // Draw Players
                     state.players.forEach(p => {
-                        drawRect(ctx, p.x - 15, p.y - 15, 30, 30, COLORS[p.id]);
+                        drawRect(ctx, p.x - 15, p.y - 15, 30, 30, COLORS[p.id % COLORS.length]);
                         // Draw face
                         ctx.fillStyle = '#fff';
                         ctx.fillRect(p.x - 8, p.y - 8, 5, 5);
@@ -665,7 +783,7 @@
 
                     state.players.forEach(p => {
                         if (!p.alive) return;
-                        const inp = inputs[p.id];
+                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
                         if (inp.up) p.vy -= accel;
                         if (inp.down) p.vy += accel;
                         if (inp.left) p.vx -= accel;
@@ -733,7 +851,7 @@
                     // Players
                     state.players.forEach(p => {
                         if (!p.alive) return;
-                        drawCircle(ctx, p.x, p.y, 20, COLORS[p.id]);
+                        drawCircle(ctx, p.x, p.y, 20, COLORS[p.id % COLORS.length]);
                         drawCircle(ctx, p.x, p.y, 14, 'rgba(0,0,0,0.3)');
                     });
                 }
@@ -763,7 +881,7 @@
                             p.x = 50 + Math.random()*700; p.y = 50 + Math.random()*500; p.hp = 5;
                         }
 
-                        const inp = inputs[p.id];
+                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
                         let movedX = 0, movedY = 0;
 
                         if (inp.up) movedY = -1;
@@ -833,7 +951,7 @@
 
                     // Bullets
                     state.bullets.forEach(b => {
-                        drawCircle(ctx, b.x, b.y, 5, COLORS[b.owner]);
+                        drawCircle(ctx, b.x, b.y, 5, COLORS[b.owner % COLORS.length]);
                     });
 
                     // Players
@@ -841,7 +959,7 @@
                         if (p.hp <= 0) return;
                         
                         // Body
-                        drawCircle(ctx, p.x, p.y, 15, COLORS[p.id]);
+                        drawCircle(ctx, p.x, p.y, 15, COLORS[p.id % COLORS.length]);
                         
                         // Gun barrel
                         ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
@@ -883,7 +1001,7 @@
 
                     state.players.forEach(p => {
                         const s = p.isIt ? itSpeed : speed;
-                        const inp = inputs[p.id];
+                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
                         if (inp.up) p.y -= s;
                         if (inp.down) p.y += s;
                         if (inp.left) p.x -= s;
@@ -920,7 +1038,7 @@
                             ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, Math.PI*2); ctx.fill();
                         }
                         
-                        drawCircle(ctx, p.x, p.y, 15, COLORS[p.id]);
+                        drawCircle(ctx, p.x, p.y, 15, COLORS[p.id % COLORS.length]);
 
                         if (p.isIt) {
                             // Draw Crown
@@ -941,9 +1059,224 @@
                     // Render custom score conversion (points / 30 for seconds)
                     let uiHtml = '';
                     for(let i=0; i<state.scores.length; i++) {
-                        uiHtml += `<span style="color:${COLORS[i]}">P${i+1}: ${Math.floor(state.scores[i]/30)}s</span>`;
+                        uiHtml += `<span style="color:${COLORS[i % COLORS.length]}">P${i+1}: ${Math.floor(state.scores[i]/30)}s</span>`;
                     }
                     ui.gameUi.innerHTML = uiHtml;
+                }
+            },
+
+            // 6. CLASSIC TAG - Just try to avoid being IT
+            classictag: {
+                init: function() {
+                    const count = Object.keys(playersMap).length;
+                    return {
+                        players: Array.from({length: count}, (_, i) => ({
+                            id: i, x: 200 + i*150, y: 300
+                        })),
+                        itId: Math.floor(Math.random() * count),
+                        cooldown: 0,
+                        scores: new Array(count).fill(0)
+                    };
+                },
+                update: function(state, inputs) {
+                    const speed = 7;
+                    const itSpeed = 7.5; // IT is slightly faster
+                    if (state.cooldown > 0) state.cooldown--;
+
+                    state.players.forEach(p => {
+                        const isIt = (p.id === state.itId);
+                        const s = isIt ? itSpeed : speed;
+                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
+                        
+                        if (inp.up) p.y -= s;
+                        if (inp.down) p.y += s;
+                        if (inp.left) p.x -= s;
+                        if (inp.right) p.x += s;
+                        
+                        p.x = Math.max(15, Math.min(CANVAS_W - 15, p.x));
+                        p.y = Math.max(15, Math.min(CANVAS_H - 15, p.y));
+                        
+                        if (!isIt) state.scores[p.id]++; // Gain points for not being IT
+                    });
+
+                    // Tag Collisions
+                    if (state.cooldown <= 0) {
+                        const itP = state.players.find(p => p.id === state.itId);
+                        for (let p of state.players) {
+                            if (p.id !== state.itId) {
+                                const dist = Math.sqrt(Math.pow(p.x - itP.x, 2) + Math.pow(p.y - itP.y, 2));
+                                if (dist < 30) {
+                                    state.itId = p.id;
+                                    state.cooldown = 60; // 2 seconds safety
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                },
+                render: function(ctx, state) {
+                    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+                    state.players.forEach(p => {
+                        const isIt = (p.id === state.itId);
+                        if (isIt) {
+                            ctx.fillStyle = state.cooldown > 0 ? 'rgba(255,255,255,0.4)' : 'rgba(239, 68, 68, 0.4)';
+                            ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, Math.PI*2); ctx.fill();
+                        }
+                        
+                        drawCircle(ctx, p.x, p.y, 15, COLORS[p.id % COLORS.length]);
+
+                        if (isIt) {
+                            ctx.fillStyle = '#fff';
+                            ctx.font = 'bold 14px sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.fillText("IT!", p.x, p.y - 25);
+                        }
+                    });
+
+                    let uiHtml = '';
+                    for(let i=0; i<state.scores.length; i++) {
+                        uiHtml += `<span style="color:${COLORS[i % COLORS.length]}">P${i+1}: ${Math.floor(state.scores[i]/30)}s</span>`;
+                    }
+                    ui.gameUi.innerHTML = uiHtml;
+                }
+            },
+
+            // 7. GARTIC PHONE - Draw & Guess Telephone Game
+            gartic: {
+                init: function() {
+                    const count = Object.keys(playersMap).length;
+                    return {
+                        playersCount: count,
+                        phase: 0, // 0: prompt, 1: draw, 2: guess, 3: reveal, 4: end
+                        ready: new Array(count).fill(false),
+                        chains: Array.from({length: count}, () => ({
+                            moves: [ { type: 'text', val: '' }, { type: 'draw', lines: [] }, { type: 'text', val: '' } ]
+                        })),
+                        reveal: { chain: 0, step: 0, timer: 0 }
+                    };
+                },
+                handleCmd: function(state, pIdx, cmd) {
+                    if (state.ready[pIdx]) return;
+                    
+                    if (state.phase === 0 && cmd.type === 'text') {
+                        state.chains[pIdx].moves[0].val = cmd.val;
+                        state.ready[pIdx] = true;
+                    } else if (state.phase === 2 && cmd.type === 'text') {
+                        const chainIdx = (pIdx + 2) % state.playersCount;
+                        state.chains[chainIdx].moves[2].val = cmd.val;
+                        state.ready[pIdx] = true;
+                    }
+
+                    if (state.phase < 3 && state.ready.every(r => r)) {
+                        state.phase++;
+                        state.ready.fill(false);
+                    }
+                },
+                update: function(state, inputs) {
+                    if (state.phase < 3) {
+                        for (let i = 0; i < state.playersCount; i++) {
+                            if (!inputs[i] && !state.ready[i]) {
+                                state.ready[i] = true;
+                                if(state.phase === 0) state.chains[i].moves[0].val = "[Disconnected]";
+                                if(state.phase === 2) {
+                                    const chainIdx = (i + 2) % state.playersCount;
+                                    state.chains[chainIdx].moves[2].val = "[Disconnected]";
+                                }
+                            }
+                        }
+                        if (state.ready.every(r => r)) {
+                            state.phase++;
+                            state.ready.fill(false);
+                        }
+                    }
+
+                    if (state.phase === 1) { // Drawing phase
+                        for (let i = 0; i < state.playersCount; i++) {
+                            if (state.ready[i]) continue;
+                            const inp = inputs[i] || { action: false, md: false, mx: 0, my: 0 };
+                            const chainIdx = (i + 1) % state.playersCount;
+                            const lines = state.chains[chainIdx].moves[1].lines;
+
+                            if (inp.action) { // Spacebar to finish drawing
+                                state.ready[i] = true;
+                                continue;
+                            }
+
+                            if (inp.md) {
+                                const lastPt = lines[lines.length - 1];
+                                // Add point if moved enough to save network bandwidth
+                                if (!lastPt || !lastPt.md || Math.abs(lastPt.x - inp.mx) > 2 || Math.abs(lastPt.y - inp.my) > 2) {
+                                    lines.push({ x: inp.mx, y: inp.my, md: true, c: COLORS[i % COLORS.length] });
+                                }
+                            } else if (lines.length > 0 && lines[lines.length - 1].md) {
+                                lines.push({ x: inp.mx, y: inp.my, md: false }); // Break stroke
+                            }
+                        }
+                    } else if (state.phase === 3) { // Reveal animation
+                        state.reveal.timer++;
+                        if (state.reveal.timer > 150) { // 5 seconds per step
+                            state.reveal.timer = 0;
+                            state.reveal.step++;
+                            if (state.reveal.step > 2) {
+                                state.reveal.step = 0;
+                                state.reveal.chain++;
+                                if (state.reveal.chain >= state.playersCount) {
+                                    state.phase = 4; // End screen
+                                }
+                            }
+                        }
+                    }
+                },
+                render: function(ctx, state) {
+                    const myIndex = playersMap[myId];
+                    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+                    ui.gameUi.innerHTML = ''; // Hide standard scores
+
+                    if (myIndex === undefined) return; // Spectator
+                    
+                    if (state.phase === 0) {
+                        toggleOverlay(true, "Enter a starting phrase for others to draw:", true);
+                        if (state.ready[myIndex]) toggleOverlay(true, "Waiting for other players...", false);
+                    } else if (state.phase === 1) {
+                        const chainIdx = (myIndex + 1) % state.playersCount;
+                        toggleOverlay(true, `Draw this: "${state.chains[chainIdx].moves[0].val}"`, false);
+                        if (state.ready[myIndex]) toggleOverlay(true, "Waiting for other players to finish drawing...", false);
+                        
+                        // Draw canvas background
+                        drawRect(ctx, 50, 50, CANVAS_W - 100, CANVAS_H - 100, '#0f172a');
+                        drawGarticLines(ctx, state.chains[chainIdx].moves[1].lines);
+                        
+                        ctx.fillStyle = '#fff';
+                        ctx.font = '20px sans-serif';
+                        ctx.textAlign = 'center';
+                        if (!state.ready[myIndex]) ctx.fillText("Press SPACE when you are finished drawing", CANVAS_W/2, CANVAS_H - 15);
+                    } else if (state.phase === 2) {
+                        const chainIdx = (myIndex + 2) % state.playersCount;
+                        toggleOverlay(true, "What is this drawing?", true);
+                        if (state.ready[myIndex]) toggleOverlay(true, "Waiting for other players...", false);
+                        
+                        drawRect(ctx, 50, 50, CANVAS_W - 100, CANVAS_H - 100, '#0f172a');
+                        drawGarticLines(ctx, state.chains[chainIdx].moves[1].lines);
+                    } else if (state.phase === 3 || state.phase === 4) {
+                        toggleOverlay(false); // Hide input overlay
+                        const chain = state.chains[state.reveal.chain] || state.chains[state.playersCount-1];
+                        const step = state.phase === 4 ? 2 : state.reveal.step;
+                        
+                        ctx.fillStyle = '#fff'; ctx.font = "bold 30px sans-serif"; ctx.textAlign = "center";
+                        ctx.fillText(`Player ${Math.min(state.reveal.chain + 1, state.playersCount)}'s Telephone Chain`, CANVAS_W/2, 40);
+                        
+                        if (step >= 0 && chain.moves[0].val) {
+                            ctx.fillStyle = '#fbbf24'; ctx.fillText(`Prompt: "${chain.moves[0].val}"`, CANVAS_W/2, 90);
+                        }
+                        if (step >= 1) {
+                            drawRect(ctx, 50, 120, CANVAS_W - 100, CANVAS_H - 240, '#0f172a');
+                            drawGarticLines(ctx, chain.moves[1].lines);
+                        }
+                        if (step >= 2 && chain.moves[2].val) {
+                            ctx.fillStyle = '#22c55e'; ctx.fillText(`Final Guess: "${chain.moves[2].val}"`, CANVAS_W/2, CANVAS_H - 50);
+                        }
+                    }
                 }
             }
         };
