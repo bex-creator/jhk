@@ -33,15 +33,25 @@
             
             <!-- Connection Phase -->
             <div id="panel-connect">
-                <h2 class="text-4xl font-extrabold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Quick Matchmaking</h2>
-                <div class="bg-slate-700 p-8 rounded-lg border border-slate-600 shadow-inner">
-                    <p class="text-lg text-slate-300 mb-8">Click below to automatically find and join an active public lobby, or host a new one if none are available.</p>
-                    <button id="btn-quick-play" class="w-full max-w-md mx-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 py-4 rounded-xl font-bold text-2xl shadow-[0_0_15px_rgba(79,70,229,0.5)] transition-all transform hover:scale-105 active:scale-95 text-white flex items-center justify-center gap-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Find Game
+                <h2 class="text-4xl font-extrabold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Public Lobbies</h2>
+                <div class="bg-slate-700 p-6 rounded-lg border border-slate-600 shadow-inner text-left">
+                    
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-white">Active Games</h3>
+                        <button id="btn-refresh" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded font-bold text-white shadow transition-all flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            Refresh
+                        </button>
+                    </div>
+                    
+                    <div id="lobby-list" class="space-y-3 max-h-64 overflow-y-auto bg-slate-900 p-4 rounded-lg border border-slate-600">
+                        <div class="text-slate-400 text-center py-4 italic">Loading lobbies...</div>
+                    </div>
+                </div>
+
+                <div class="mt-6 border-t border-slate-600 pt-6">
+                    <button id="btn-host-new" class="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 py-4 rounded-xl font-bold text-xl shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all transform hover:scale-[1.02] active:scale-[0.98] text-white">
+                        Host New Game
                     </button>
                 </div>
             </div>
@@ -139,8 +149,11 @@
         let lastMouseSync = 0;
         let lastOverlayState = "";
         let currentRoomIndex = 1;
-        const MAX_ROOMS = 50; // Max public matchmaking slots
+        const MAX_ROOMS = 15; // Scan range for lobbies
         let nextPlayerIndex = 0; // Ensures IDs don't conflict on reconnects
+        let scannerPeer = null;
+
+        const GameNames = { tron: 'Lightcycles', dash: 'Coin Dash', sumo: 'Sumo Smash', shooter: 'Blaster', tag: 'Crown Tag', classictag: 'Classic Tag', gartic: 'Gartic Phone' };
 
         // DOM Elements
         const ui = {
@@ -155,7 +168,9 @@
             playerCount: document.getElementById('player-count'),
             status: document.getElementById('connection-status'),
             btnLeave: document.getElementById('btn-leave'),
-            btnQuickPlay: document.getElementById('btn-quick-play'),
+            btnRefresh: document.getElementById('btn-refresh'),
+            btnHostNew: document.getElementById('btn-host-new'),
+            lobbyList: document.getElementById('lobby-list'),
             gameUi: document.getElementById('game-ui'),
             overlay: {
                 container: document.getElementById('game-overlay'),
@@ -279,49 +294,118 @@
         }
 
         // --- NETWORK & MATCHMAKING SETUP ---
-        document.getElementById('btn-quick-play').addEventListener('click', () => {
-            ui.btnQuickPlay.disabled = true;
-            ui.btnQuickPlay.innerHTML = `<svg class="animate-spin -ml-1 mr-3 h-6 w-6 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Searching...`;
-            startQuickPlay(1);
+        document.getElementById('btn-refresh').addEventListener('click', scanLobbies);
+        
+        document.getElementById('btn-host-new').addEventListener('click', () => {
+            ui.btnHostNew.disabled = true;
+            ui.btnHostNew.innerHTML = 'Creating...';
+            findEmptySlotToHost(1);
         });
 
-        function startQuickPlay(index) {
+        // Initialize Lobby Browser on load
+        scanLobbies();
+
+        function scanLobbies() {
+            ui.lobbyList.innerHTML = '<div class="text-slate-400 text-center py-4 italic flex justify-center items-center gap-2"><svg class="animate-spin h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Scanning for lobbies...</div>';
+            
+            if (!scannerPeer) {
+                scannerPeer = new Peer({ config: {'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }]} });
+                scannerPeer.on('error', err => {
+                    // Suppress 'peer-unavailable' as it just means the slot is empty during our scan
+                    if(err.type !== 'peer-unavailable') console.error("Scanner Error:", err);
+                });
+            }
+
+            let foundLobbies = [];
+            let scanCompletes = 0;
+
+            const updateListUI = () => {
+                if (foundLobbies.length === 0) {
+                    ui.lobbyList.innerHTML = '<div class="text-slate-500 text-center py-4">No public lobbies found. Be the first to host!</div>';
+                    return;
+                }
+                
+                ui.lobbyList.innerHTML = '';
+                foundLobbies.sort((a,b) => a.index - b.index).forEach(data => {
+                    const isFull = data.players >= 4;
+                    ui.lobbyList.innerHTML += `
+                        <div class="flex justify-between items-center bg-slate-800 p-3 rounded border border-slate-600 shadow">
+                            <div class="text-left">
+                                <div class="font-bold text-blue-400 text-lg">Public Lobby #${data.index}</div>
+                                <div class="text-sm text-slate-400"><span class="text-white">${GameNames[data.game] || 'In Lobby'}</span> | Players: <span class="${isFull ? 'text-red-400' : 'text-green-400'}">${data.players}/4</span></div>
+                            </div>
+                            <button onclick="joinSpecificRoom('p2p-arcade-public-v1-${data.index}', ${data.index})" class="px-4 py-2 ${isFull ? 'bg-slate-600 cursor-not-allowed text-slate-400' : 'bg-green-600 hover:bg-green-500 text-white'} rounded font-bold transition" ${isFull ? 'disabled' : ''}>${isFull ? 'Full' : 'Join'}</button>
+                        </div>
+                    `;
+                });
+            };
+
+            // Scan slots 1 through MAX_ROOMS
+            for (let i = 1; i <= MAX_ROOMS; i++) {
+                setTimeout(() => {
+                    if (!scannerPeer || scannerPeer.destroyed) return;
+                    const targetId = `p2p-arcade-public-v1-${i}`;
+                    const conn = scannerPeer.connect(targetId, { reliable: true });
+                    
+                    let resolved = false;
+                    const markDone = () => { if(!resolved) { resolved = true; scanCompletes++; if(scanCompletes >= MAX_ROOMS) updateListUI(); } };
+
+                    conn.on('open', () => {
+                        conn.send({ type: 'LOBBY_INFO_REQ' });
+                    });
+
+                    conn.on('data', data => {
+                        if (data.type === 'LOBBY_INFO_RES') {
+                            foundLobbies.push(data);
+                            conn.close();
+                            markDone();
+                        }
+                    });
+
+                    conn.on('error', () => markDone());
+                    conn.on('close', () => markDone());
+
+                    // Timeout for dead ghost lobbies
+                    setTimeout(() => { if(!resolved) { if(conn) conn.close(); markDone(); } }, 2500);
+
+                }, i * 50); // Stagger connection attempts slightly to avoid freezing network stack
+            }
+        }
+
+        function findEmptySlotToHost(index) {
             currentRoomIndex = index;
-            if(index > MAX_ROOMS) {
-                alert("All public matchmaking slots are currently full! Please try again later.");
+            if(index > 50) {
+                alert("Cannot find an empty hosting slot.");
                 resetLobby();
                 return;
             }
 
-            ui.status.innerText = `Status: Checking lobby ${index}...`;
-            const roomId = `p2p-arcade-public-v1-${index}`; // Predictable ID
+            ui.status.innerText = `Status: Checking slot ${index}...`;
+            const roomId = `p2p-arcade-public-v1-${index}`; 
 
-            // Attempt to claim this ID and become the host
             peer = new Peer(roomId, {
                 config: {'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478?transport=udp' }
+                    { urls: 'stun:stun.l.google.com:19302' }
                 ]}
             });
 
             peer.on('open', id => {
-                // Successfully claimed the ID -> We are the host!
                 isHost = true;
                 myId = id;
                 ui.status.innerText = `Status: Hosting Lobby #${index}`;
                 ui.roomIdDisplay.innerText = `Public Lobby #${index}`;
+                
+                // Cleanup scanner if we are hosting
+                if(scannerPeer) { scannerPeer.destroy(); scannerPeer = null; }
+                
                 setupHostLobby();
             });
 
             peer.on('error', err => {
                 if (err.type === 'unavailable-id') {
-                    // Room exists! Someone is already hosting it. Let's join them.
+                    // Room exists, try the next slot
                     peer.destroy();
-                    // 500ms delay to ensure the peer connection is fully torn down before retrying
-                    setTimeout(() => joinExistingRoom(roomId, index), 500);
-                } else if (err.type === 'peer-unavailable') {
-                    peer.destroy();
-                    setTimeout(() => startQuickPlay(index + 1), 500);
+                    setTimeout(() => findEmptySlotToHost(index + 1), 200);
                 } else {
                     console.error("Peer error:", err);
                     alert("Network error: " + err.type);
@@ -330,37 +414,40 @@
             });
         }
 
-        function joinExistingRoom(targetRoomId, index) {
+        function joinSpecificRoom(targetRoomId, index) {
+            // Cleanup scanner to free ports
+            if(scannerPeer) { scannerPeer.destroy(); scannerPeer = null; }
+
             ui.status.innerText = `Status: Joining lobby ${index}...`;
             peer = new Peer({
                 config: {'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478?transport=udp' }
+                    { urls: 'stun:stun.l.google.com:19302' }
                 ]}
             });
 
-            let connTimeout; // Timeout for ghost lobbies
+            let connTimeout; 
 
             peer.on('open', id => {
                 myId = id;
                 hostConn = peer.connect(targetRoomId, { reliable: true });
 
-                // If the host disconnected improperly, the ID exists but they won't respond. Skip them.
                 connTimeout = setTimeout(() => {
                     if (!hostConn || !hostConn.open) {
-                        ui.status.innerText = `Status: Host ${index} unresponsive. Skipping...`;
-                        if (hostConn) hostConn.close();
-                        peer.destroy();
-                        setTimeout(() => startQuickPlay(index + 1), 500);
+                        ui.status.innerText = `Status: Host unresponsive.`;
+                        alert("Connection to host timed out.");
+                        resetLobby();
                     }
                 }, 5000);
 
                 hostConn.on('open', () => {
-                    clearTimeout(connTimeout); // Connection succeeded, cancel the timeout
+                    clearTimeout(connTimeout); 
                     ui.status.innerText = `Status: Connected to Lobby #${index}`;
                     ui.roomIdDisplay.innerText = `Public Lobby #${index}`;
                     isHost = false;
                     setupClientLobby();
+                    
+                    // Request to officially join the game session
+                    hostConn.send({ type: 'JOIN_REQ' });
                 });
 
                 hostConn.on('data', handleClientData);
@@ -368,9 +455,8 @@
                 hostConn.on('error', err => {
                     console.error("Host connection error:", err);
                     clearTimeout(connTimeout);
-                    if (hostConn) hostConn.close();
-                    peer.destroy();
-                    setTimeout(() => startQuickPlay(index + 1), 500);
+                    alert("Lost connection to host.");
+                    resetLobby();
                 });
 
                 hostConn.on('close', () => {
@@ -382,15 +468,9 @@
             });
 
             peer.on('error', err => {
-                if (err.type === 'peer-unavailable') {
-                    // The host disconnected right as we tried to connect
-                    peer.destroy();
-                    setTimeout(() => startQuickPlay(index + 1), 500);
-                } else {
-                    console.error(err);
-                    alert("Network Error: " + err.type);
-                    resetLobby();
-                }
+                console.error(err);
+                alert("Network Error: " + err.type);
+                resetLobby();
             });
         }
 
@@ -404,37 +484,49 @@
             addPlayer(myId);
 
             peer.on('connection', conn => {
-                if (Object.keys(clients).length >= 3) {
-                    conn.send({ type: 'ERROR', msg: 'Room is full' });
-                    setTimeout(() => conn.close(), 500);
-                    return;
-                }
-
-                conn.on('open', () => {
-                    clients[conn.peer] = conn;
-                    addPlayer(conn.peer);
-                    
-                    conn.send({ 
-                        type: 'INIT_SYNC', 
-                        playersMap: playersMap,
-                        currentGame: currentGame,
-                        gameState: gameState
-                    });
-                    broadcastPlayers();
-                });
-
                 conn.on('data', data => {
-                    if (data.type === 'INPUT') {
-                        playerInputs[playersMap[conn.peer]] = data.input;
+                    if (data.type === 'LOBBY_INFO_REQ') {
+                        // Respond to scanner peers
+                        conn.send({ 
+                            type: 'LOBBY_INFO_RES', 
+                            index: currentRoomIndex, 
+                            players: Object.keys(playersMap).length, 
+                            game: currentGame 
+                        });
+                    } else if (data.type === 'JOIN_REQ') {
+                        // Official join attempt
+                        if (Object.keys(clients).length >= 3) { // Max 4 players (Host + 3 clients)
+                            conn.send({ type: 'ERROR', msg: 'Room is full' });
+                            return;
+                        }
+                        
+                        clients[conn.peer] = conn;
+                        addPlayer(conn.peer);
+                        
+                        conn.send({ 
+                            type: 'INIT_SYNC', 
+                            playersMap: playersMap,
+                            currentGame: currentGame,
+                            gameState: gameState
+                        });
+                        broadcastPlayers();
+                    } else if (data.type === 'INPUT') {
+                        if(playersMap[conn.peer] !== undefined) {
+                            playerInputs[playersMap[conn.peer]] = data.input;
+                        }
                     } else if (data.type === 'CMD') {
-                        processCommand(playersMap[conn.peer], data.cmd);
+                        if(playersMap[conn.peer] !== undefined) {
+                            processCommand(playersMap[conn.peer], data.cmd);
+                        }
                     }
                 });
 
                 conn.on('close', () => {
-                    delete clients[conn.peer];
-                    removePlayer(conn.peer);
-                    broadcastPlayers();
+                    if (clients[conn.peer]) {
+                        delete clients[conn.peer];
+                        removePlayer(conn.peer);
+                        broadcastPlayers();
+                    }
                 });
             });
         }
@@ -551,15 +643,9 @@
             ui.btnLeave.classList.add('hidden');
             ui.status.innerText = "Status: Disconnected";
             
-            // Reset the quick play button
-            ui.btnQuickPlay.disabled = false;
-            ui.btnQuickPlay.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Find Game
-            `;
+            ui.btnHostNew.disabled = false;
+            ui.btnHostNew.innerHTML = 'Host New Game';
+            scanLobbies(); // Refresh the list
         }
 
         function returnToLobbyUI() {
