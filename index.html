@@ -12,6 +12,9 @@
         canvas.active { display: block; }
         .game-btn { transition: all 0.2s ease; }
         .game-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #3b82f6; cursor: pointer; margin-top: -6px; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #475569; border-radius: 2px; }
     </style>
 </head>
 <body class="flex flex-col h-screen">
@@ -90,15 +93,33 @@
         </div>
 
         <!-- Game Canvases Area -->
-        <div id="screen-game" class="hidden w-full h-full flex flex-col items-center justify-center">
+        <div id="screen-game" class="hidden w-full h-full flex flex-col items-center justify-center relative">
             
             <!-- Contextual Game UI overlay (scores etc) -->
-            <div id="game-ui" class="absolute top-20 flex gap-6 text-xl font-bold bg-slate-800/80 px-6 py-2 rounded-full backdrop-blur-sm z-10 pointer-events-none">
+            <div id="game-ui" class="absolute top-10 flex gap-6 text-xl font-bold bg-slate-800/80 px-6 py-2 rounded-full backdrop-blur-sm z-10 pointer-events-none">
                 <!-- Scores injected here -->
             </div>
 
+            <!-- Drawing Tools Palette -->
+            <div id="drawing-tools" class="absolute left-4 top-1/2 transform -translate-y-1/2 bg-slate-800 p-4 rounded-xl flex-col gap-4 hidden z-20 border border-slate-600 shadow-xl">
+                <h4 class="text-white text-sm font-bold text-center border-b border-slate-600 pb-2 mb-2">Palette</h4>
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <button class="w-10 h-10 rounded-full border-2 border-slate-400 hover:border-white focus:border-white shadow" style="background-color: #ffffff;" onclick="setBrushColor('#ffffff')"></button>
+                    <button class="w-10 h-10 rounded-full border-2 border-slate-400 hover:border-white focus:border-white shadow" style="background-color: #ef4444;" onclick="setBrushColor('#ef4444')"></button>
+                    <button class="w-10 h-10 rounded-full border-2 border-slate-400 hover:border-white focus:border-white shadow" style="background-color: #3b82f6;" onclick="setBrushColor('#3b82f6')"></button>
+                    <button class="w-10 h-10 rounded-full border-2 border-slate-400 hover:border-white focus:border-white shadow" style="background-color: #22c55e;" onclick="setBrushColor('#22c55e')"></button>
+                    <button class="w-10 h-10 rounded-full border-2 border-slate-400 hover:border-white focus:border-white shadow" style="background-color: #eab308;" onclick="setBrushColor('#eab308')"></button>
+                    <button class="w-10 h-10 rounded-full border-2 border-slate-400 hover:border-white focus:border-white shadow" style="background-color: #000000;" onclick="setBrushColor('#000000')"></button>
+                </div>
+                <div class="mb-4">
+                    <label class="text-xs text-slate-400 block mb-1">Thickness</label>
+                    <input type="range" min="2" max="25" value="5" class="w-full" onchange="setBrushSize(this.value)" oninput="setBrushSize(this.value)">
+                </div>
+                <button class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded text-sm transition" onclick="clearCanvasCmd()">Clear Canvas</button>
+            </div>
+
             <!-- Gartic Phone Text Input Overlay -->
-            <div id="game-overlay" class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-slate-800 p-6 rounded-xl border border-slate-600 flex flex-col gap-4 items-center hidden z-20 w-11/12 max-w-lg shadow-2xl">
+            <div id="game-overlay" class="absolute bottom-10 left-1/2 transform -translate-x-1/2 bg-slate-800 p-6 rounded-xl border border-slate-600 flex flex-col gap-4 items-center hidden z-20 w-11/12 max-w-lg shadow-2xl">
                 <h3 id="overlay-prompt" class="text-2xl font-bold text-yellow-400 text-center"></h3>
                 <input type="text" id="overlay-input" class="w-full p-3 text-black rounded text-lg font-bold outline-none focus:ring-4 focus:ring-blue-500" autocomplete="off" placeholder="Type here...">
                 <button id="overlay-btn" class="bg-blue-600 hover:bg-blue-500 w-full py-3 rounded font-bold text-white text-xl transition shadow-lg">Submit</button>
@@ -126,7 +147,7 @@
         const CANVAS_W = 800;
         const CANVAS_H = 600;
         const FPS = 30;
-        const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']; // Red, Blue, Green, Yellow
+        const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#8b5cf6', '#0ea5e9', '#f97316']; 
 
         let peer = null;
         let myId = null;
@@ -138,13 +159,13 @@
         let hostLoopInterval = null;
         
         // State variables
-        let playersMap = {}; // Maps peerId -> player index (0-3)
+        let playersMap = {}; // Maps peerId -> permanent player index
         let playerInputs = {}; // Maps index -> current input state
         let gameState = {}; // The authoritative game state
 
         // Local Input
         const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false, ' ': false };
-        let myInput = { up: false, down: false, left: false, right: false, action: false, mx: 0, my: 0, md: false };
+        let myInput = { up: false, down: false, left: false, right: false, action: false, mx: 0, my: 0, md: false, brushColor: '#ffffff', brushSize: 5 };
         let mouseX = 0, mouseY = 0, mouseDown = false;
         let lastMouseSync = 0;
         let lastOverlayState = "";
@@ -172,6 +193,7 @@
             btnHostNew: document.getElementById('btn-host-new'),
             lobbyList: document.getElementById('lobby-list'),
             gameUi: document.getElementById('game-ui'),
+            drawingTools: document.getElementById('drawing-tools'),
             overlay: {
                 container: document.getElementById('game-overlay'),
                 prompt: document.getElementById('overlay-prompt'),
@@ -190,6 +212,10 @@
         };
 
         // --- INPUT HANDLING ---
+        window.setBrushColor = (color) => { myInput.brushColor = color; };
+        window.setBrushSize = (size) => { myInput.brushSize = parseInt(size); };
+        window.clearCanvasCmd = () => { sendCmd({ type: 'clear' }); };
+
         function updateInput() {
             myInput.up = keys.ArrowUp || keys.w;
             myInput.down = keys.ArrowDown || keys.s;
@@ -210,7 +236,6 @@
         };
 
         window.addEventListener('keydown', e => { 
-            // Ignore keystrokes if the user is typing in a chatbox
             if (document.activeElement && document.activeElement.tagName === 'INPUT' && e.key !== 'Enter') return;
             const k = keyMap[e.key.toLowerCase()] || e.key;
             if (keys.hasOwnProperty(k) && !keys[k]) { keys[k] = true; updateInput(); }
@@ -228,7 +253,7 @@
                 playerInputs[playersMap[myId]] = { ...myInput };
             } else if (!isHost && hostConn && hostConn.open) {
                 const now = Date.now();
-                if (now - lastMouseSync > 30) {
+                if (now - lastMouseSync > 30 || !mouseDown) { // Sync more aggressively on mouse up/down
                     hostConn.send({ type: 'INPUT', input: myInput });
                     lastMouseSync = now;
                 }
@@ -240,9 +265,14 @@
                 const rect = canvas.getBoundingClientRect();
                 mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
                 mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
-                syncMouse();
+                if(mouseDown) syncMouse(); // Only sync actively if drawing to save bandwidth
             });
-            canvas.addEventListener('mousedown', () => { mouseDown = true; syncMouse(); });
+            canvas.addEventListener('mousedown', (e) => { 
+                const rect = canvas.getBoundingClientRect();
+                mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+                mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+                mouseDown = true; syncMouse(); 
+            });
             canvas.addEventListener('mouseup', () => { mouseDown = false; syncMouse(); });
             canvas.addEventListener('mouseleave', () => { mouseDown = false; syncMouse(); });
         });
@@ -283,7 +313,7 @@
                 if (needsInput) {
                     ui.overlay.input.classList.remove('hidden');
                     ui.overlay.btn.classList.remove('hidden');
-                    ui.overlay.input.focus();
+                    setTimeout(() => ui.overlay.input.focus(), 10);
                 } else {
                     ui.overlay.input.classList.add('hidden');
                     ui.overlay.btn.classList.add('hidden');
@@ -291,6 +321,11 @@
             } else {
                 ui.overlay.container.classList.add('hidden');
             }
+        }
+
+        function toggleDrawingTools(show) {
+            if (show) ui.drawingTools.classList.replace('hidden', 'flex');
+            else ui.drawingTools.classList.replace('flex', 'hidden');
         }
 
         // --- NETWORK & MATCHMAKING SETUP ---
@@ -302,17 +337,15 @@
             findEmptySlotToHost(1);
         });
 
-        // Initialize Lobby Browser on load
         scanLobbies();
 
         function scanLobbies() {
             ui.lobbyList.innerHTML = '<div class="text-slate-400 text-center py-4 italic flex justify-center items-center gap-2"><svg class="animate-spin h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Scanning for lobbies...</div>';
             
-            if (!scannerPeer) {
+            if (!scannerPeer || scannerPeer.destroyed) {
                 scannerPeer = new Peer({ config: {'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }]} });
                 scannerPeer.on('error', err => {
-                    // Suppress 'peer-unavailable' as it just means the slot is empty during our scan
-                    if(err.type !== 'peer-unavailable') console.error("Scanner Error:", err);
+                    // Suppress scanner errors. PeerJS throws errors for unavailable peers or aborted connections, which is expected during a scan.
                 });
             }
 
@@ -340,35 +373,34 @@
                 });
             };
 
-            // Scan slots 1 through MAX_ROOMS
             for (let i = 1; i <= MAX_ROOMS; i++) {
                 setTimeout(() => {
-                    if (!scannerPeer || scannerPeer.destroyed) return;
-                    const targetId = `p2p-arcade-public-v1-${i}`;
-                    const conn = scannerPeer.connect(targetId, { reliable: true });
-                    
                     let resolved = false;
                     const markDone = () => { if(!resolved) { resolved = true; scanCompletes++; if(scanCompletes >= MAX_ROOMS) updateListUI(); } };
 
-                    conn.on('open', () => {
-                        conn.send({ type: 'LOBBY_INFO_REQ' });
-                    });
+                    if (!scannerPeer || scannerPeer.destroyed) {
+                        markDone();
+                        return;
+                    }
 
-                    conn.on('data', data => {
-                        if (data.type === 'LOBBY_INFO_RES') {
-                            foundLobbies.push(data);
-                            conn.close();
+                    try {
+                        const targetId = `p2p-arcade-public-v1-${i}`;
+                        const conn = scannerPeer.connect(targetId, { reliable: true });
+                        
+                        if (!conn) {
                             markDone();
+                            return;
                         }
-                    });
 
-                    conn.on('error', () => markDone());
-                    conn.on('close', () => markDone());
-
-                    // Timeout for dead ghost lobbies
-                    setTimeout(() => { if(!resolved) { if(conn) conn.close(); markDone(); } }, 2500);
-
-                }, i * 50); // Stagger connection attempts slightly to avoid freezing network stack
+                        conn.on('open', () => { conn.send({ type: 'LOBBY_INFO_REQ' }); });
+                        conn.on('data', data => { if (data.type === 'LOBBY_INFO_RES') { foundLobbies.push(data); conn.close(); markDone(); } });
+                        conn.on('error', () => markDone());
+                        conn.on('close', () => markDone());
+                        setTimeout(() => { if(!resolved) { if(conn) conn.close(); markDone(); } }, 2500);
+                    } catch (e) {
+                        markDone();
+                    }
+                }, i * 100); 
             }
         }
 
@@ -381,29 +413,19 @@
             }
 
             ui.status.innerText = `Status: Checking slot ${index}...`;
-            const roomId = `p2p-arcade-public-v1-${index}`; 
-
-            peer = new Peer(roomId, {
-                config: {'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' }
-                ]}
-            });
+            peer = new Peer(`p2p-arcade-public-v1-${index}`, { config: {'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }]} });
 
             peer.on('open', id => {
                 isHost = true;
                 myId = id;
                 ui.status.innerText = `Status: Hosting Lobby #${index}`;
                 ui.roomIdDisplay.innerText = `Public Lobby #${index}`;
-                
-                // Cleanup scanner if we are hosting
                 if(scannerPeer) { scannerPeer.destroy(); scannerPeer = null; }
-                
                 setupHostLobby();
             });
 
             peer.on('error', err => {
                 if (err.type === 'unavailable-id') {
-                    // Room exists, try the next slot
                     peer.destroy();
                     setTimeout(() => findEmptySlotToHost(index + 1), 200);
                 } else {
@@ -415,15 +437,9 @@
         }
 
         function joinSpecificRoom(targetRoomId, index) {
-            // Cleanup scanner to free ports
             if(scannerPeer) { scannerPeer.destroy(); scannerPeer = null; }
-
             ui.status.innerText = `Status: Joining lobby ${index}...`;
-            peer = new Peer({
-                config: {'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' }
-                ]}
-            });
+            peer = new Peer({ config: {'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }]} });
 
             let connTimeout; 
 
@@ -445,8 +461,6 @@
                     ui.roomIdDisplay.innerText = `Public Lobby #${index}`;
                     isHost = false;
                     setupClientLobby();
-                    
-                    // Request to officially join the game session
                     hostConn.send({ type: 'JOIN_REQ' });
                 });
 
@@ -486,38 +500,20 @@
             peer.on('connection', conn => {
                 conn.on('data', data => {
                     if (data.type === 'LOBBY_INFO_REQ') {
-                        // Respond to scanner peers
-                        conn.send({ 
-                            type: 'LOBBY_INFO_RES', 
-                            index: currentRoomIndex, 
-                            players: Object.keys(playersMap).length, 
-                            game: currentGame 
-                        });
+                        conn.send({ type: 'LOBBY_INFO_RES', index: currentRoomIndex, players: Object.keys(playersMap).length, game: currentGame });
                     } else if (data.type === 'JOIN_REQ') {
-                        // Official join attempt
-                        if (Object.keys(clients).length >= 3) { // Max 4 players (Host + 3 clients)
+                        if (Object.keys(clients).length >= 3) { 
                             conn.send({ type: 'ERROR', msg: 'Room is full' });
                             return;
                         }
-                        
                         clients[conn.peer] = conn;
                         addPlayer(conn.peer);
-                        
-                        conn.send({ 
-                            type: 'INIT_SYNC', 
-                            playersMap: playersMap,
-                            currentGame: currentGame,
-                            gameState: gameState
-                        });
+                        conn.send({ type: 'INIT_SYNC', playersMap: playersMap, currentGame: currentGame, gameState: gameState });
                         broadcastPlayers();
                     } else if (data.type === 'INPUT') {
-                        if(playersMap[conn.peer] !== undefined) {
-                            playerInputs[playersMap[conn.peer]] = data.input;
-                        }
+                        if(playersMap[conn.peer] !== undefined) playerInputs[playersMap[conn.peer]] = data.input;
                     } else if (data.type === 'CMD') {
-                        if(playersMap[conn.peer] !== undefined) {
-                            processCommand(playersMap[conn.peer], data.cmd);
-                        }
+                        if(playersMap[conn.peer] !== undefined) processCommand(playersMap[conn.peer], data.cmd);
                     }
                 });
 
@@ -541,19 +537,11 @@
 
         function handleClientData(data) {
             if (data.type === 'ERROR') {
-                if (data.msg === 'Room is full') {
-                    // Automatic fallback to next room
-                    hostConn.close();
-                    peer.destroy();
-                    setTimeout(() => startQuickPlay(currentRoomIndex + 1), 500);
-                } else {
-                    alert(data.msg);
-                    resetLobby();
-                }
+                alert(data.msg);
+                resetLobby();
             } else if (data.type === 'INIT_SYNC') {
                 playersMap = data.playersMap;
                 updatePlayerListUI();
-                // Bug fix: If joining mid-game, ensure the canvas switches over
                 if (data.currentGame) {
                     currentGame = data.currentGame;
                     gameState = data.gameState;
@@ -576,20 +564,18 @@
 
         document.getElementById('btn-leave').addEventListener('click', () => {
             if (isHost && currentGame) {
-                // Host ending game, return to lobby
                 stopGame();
                 broadcast({ type: 'LOBBY_RETURN' });
                 returnToLobbyUI();
             } else {
-                // Completely leave
                 resetLobby();
             }
         });
 
         // --- ROOM MANAGEMENT ---
         function addPlayer(id) {
-            playersMap[id] = nextPlayerIndex; // Assign fixed index per session
-            playerInputs[nextPlayerIndex] = { up: false, down: false, left: false, right: false, action: false, mx: 0, my: 0, md: false };
+            playersMap[id] = nextPlayerIndex; 
+            playerInputs[nextPlayerIndex] = { up: false, down: false, left: false, right: false, action: false, mx: 0, my: 0, md: false, brushColor: '#ffffff', brushSize: 5 };
             nextPlayerIndex++;
             updatePlayerListUI();
         }
@@ -597,7 +583,7 @@
         function removePlayer(id) {
             const index = playersMap[id];
             delete playersMap[id];
-            delete playerInputs[index]; // Do not re-index to preserve active game state!
+            delete playerInputs[index]; // Do not re-index to preserve active IDs!
             updatePlayerListUI();
         }
 
@@ -608,19 +594,14 @@
 
         function broadcast(msg) {
             if (!isHost) return;
-            Object.values(clients).forEach(conn => {
-                if (conn.open) conn.send(msg);
-            });
+            Object.values(clients).forEach(conn => { if (conn.open) conn.send(msg); });
         }
 
         function updatePlayerListUI() {
             ui.playerList.innerHTML = '';
-            const count = Object.keys(playersMap).length;
-            ui.playerCount.innerText = count;
+            ui.playerCount.innerText = Object.keys(playersMap).length;
             
-            // Sort by index to maintain order
             const sortedIds = Object.keys(playersMap).sort((a,b) => playersMap[a] - playersMap[b]);
-            
             sortedIds.forEach(id => {
                 const idx = playersMap[id];
                 const badge = document.createElement('div');
@@ -645,7 +626,7 @@
             
             ui.btnHostNew.disabled = false;
             ui.btnHostNew.innerHTML = 'Host New Game';
-            scanLobbies(); // Refresh the list
+            scanLobbies(); 
         }
 
         function returnToLobbyUI() {
@@ -654,7 +635,7 @@
             ui.btnLeave.innerText = "Leave Room";
             currentGame = null;
             toggleOverlay(false);
-            // Clear all canvases
+            toggleDrawingTools(false);
             Object.values(ui.canvases).forEach(canvas => {
                 const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
@@ -674,10 +655,8 @@
             if (!isHost) return;
             currentGame = gameName;
             gameState = Games[gameName].init();
-            
             broadcast({ type: 'START_GAME', game: gameName, state: gameState });
             switchCanvas(gameName);
-            
             if (hostLoopInterval) clearInterval(hostLoopInterval);
             hostLoopInterval = setInterval(hostLoop, 1000 / FPS);
         }
@@ -691,7 +670,7 @@
             if (!currentGame) return;
             Games[currentGame].update(gameState, playerInputs);
             broadcast({ type: 'STATE_UPDATE', state: gameState });
-            renderGame(currentGame, gameState); // Render locally for host
+            renderGame(currentGame, gameState); 
         }
 
         // --- RENDER ENGINE ---
@@ -699,17 +678,13 @@
             const canvas = ui.canvases[gameName];
             const ctx = canvas.getContext('2d');
             
-            // Render specific game
             Games[gameName].render(ctx, state);
             
-            // Update UI scores if applicable
             let uiHtml = '';
             if (state.scores) {
-                for(let i=0; i<state.scores.length; i++) {
-                    if (state.scores[i] !== undefined) {
-                        uiHtml += `<span style="color:${COLORS[i % COLORS.length]}">P${i+1}: ${state.scores[i]}</span>`;
-                    }
-                }
+                Object.keys(state.scores).forEach(id => {
+                    uiHtml += `<span style="color:${COLORS[id % COLORS.length]}">P${parseInt(id)+1}: ${state.scores[id]}</span>`;
+                });
             }
             ui.gameUi.innerHTML = uiHtml;
         }
@@ -717,255 +692,185 @@
         // Helper Drawing Functions
         function drawRect(ctx, x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
         function drawCircle(ctx, x, y, r, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+        function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+            const words = text.split(' ');
+            let line = '';
+            for(let n = 0; n < words.length; n++) {
+                let testLine = line + words[n] + ' ';
+                if (ctx.measureText(testLine).width > maxWidth && n > 0) {
+                    ctx.fillText(line, x, y);
+                    line = words[n] + ' ';
+                    y += lineHeight;
+                } else {
+                    line = testLine;
+                }
+            }
+            ctx.fillText(line, x, y);
+        }
+
         function drawGarticLines(ctx, lines) {
             if (!lines || lines.length === 0) return;
-            ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 5;
-            ctx.beginPath();
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
             let isDrawing = false;
+            let lastC = null, lastS = null;
+
             for (let i = 0; i < lines.length; i++) {
                 const pt = lines[i];
                 if (pt.md) {
-                    if (!isDrawing) { ctx.beginPath(); ctx.moveTo(pt.x, pt.y); isDrawing = true; ctx.strokeStyle = pt.c || '#fff'; } 
-                    else { ctx.lineTo(pt.x, pt.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(pt.x, pt.y); }
+                    if (!isDrawing || pt.c !== lastC || pt.s !== lastS) {
+                        if (isDrawing) ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(pt.x, pt.y);
+                        isDrawing = true;
+                        lastC = pt.c || '#fff';
+                        lastS = pt.s || 5;
+                        ctx.strokeStyle = lastC;
+                        ctx.lineWidth = lastS;
+                    } else {
+                        ctx.lineTo(pt.x, pt.y);
+                    }
                 } else {
-                    isDrawing = false;
+                    if (isDrawing) { ctx.stroke(); isDrawing = false; }
                 }
             }
+            if (isDrawing) ctx.stroke();
         }
 
-        // --- THE 5 GAMES IMPLEMENTATIONS ---
+        // --- THE GAMES IMPLEMENTATIONS ---
 
         const Games = {
-            // 1. TRON (Lightcycles) - Array grid based collision
             tron: {
                 init: function() {
-                    const count = Object.keys(playersMap).length;
-                    const state = { 
-                        players: [], 
-                        grid: new Array(CANVAS_W/10).fill(0).map(()=>new Array(CANVAS_H/10).fill(-1)),
-                        scores: new Array(count).fill(0),
-                        winner: -1
-                    };
-                    const startPos = [
-                        {x: 10, y: 30, dir: 1}, {x: 70, y: 30, dir: 3},
-                        {x: 40, y: 10, dir: 2}, {x: 40, y: 50, dir: 0}
-                    ];
-                    for(let i=0; i<count; i++) {
-                        state.players.push({
-                            x: startPos[i % startPos.length].x, y: startPos[i % startPos.length].y, dir: startPos[i % startPos.length].dir,
-                            alive: true, color: COLORS[i % COLORS.length], id: i
-                        });
-                        state.grid[startPos[i % startPos.length].x][startPos[i % startPos.length].y] = i;
-                    }
+                    const activeIds = Object.values(playersMap);
+                    const state = { players: [], grid: new Array(CANVAS_W/10).fill(0).map(()=>new Array(CANVAS_H/10).fill(-1)), scores: {}, winner: -1 };
+                    const startPos = [{x: 10, y: 30, dir: 1}, {x: 70, y: 30, dir: 3}, {x: 40, y: 10, dir: 2}, {x: 40, y: 50, dir: 0}];
+                    activeIds.forEach((id, i) => {
+                        state.scores[id] = 0;
+                        state.players.push({ id: id, x: startPos[i % startPos.length].x, y: startPos[i % startPos.length].y, dir: startPos[i % startPos.length].dir, alive: true });
+                        state.grid[startPos[i % startPos.length].x][startPos[i % startPos.length].y] = id;
+                    });
                     return state;
                 },
                 update: function(state, inputs) {
-                    if (state.winner !== -1) return; // Game over
-                    
-                    let aliveCount = 0;
-                    let lastAlive = -1;
-
+                    if (state.winner !== -1) return;
+                    let aliveCount = 0, lastAlive = -1;
                     state.players.forEach(p => {
                         if (!p.alive) return;
-                        aliveCount++;
-                        lastAlive = p.id;
-                        
-                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
-                        // Prevent 180 degree turns
-                        if (inp.up && p.dir !== 2) p.dir = 0;
-                        else if (inp.right && p.dir !== 3) p.dir = 1;
-                        else if (inp.down && p.dir !== 0) p.dir = 2;
-                        else if (inp.left && p.dir !== 1) p.dir = 3;
+                        aliveCount++; lastAlive = p.id;
+                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false };
+                        if (inp.up && p.dir !== 2) p.dir = 0; else if (inp.right && p.dir !== 3) p.dir = 1;
+                        else if (inp.down && p.dir !== 0) p.dir = 2; else if (inp.left && p.dir !== 1) p.dir = 3;
 
-                        if (p.dir === 0) p.y -= 1;
-                        if (p.dir === 1) p.x += 1;
-                        if (p.dir === 2) p.y += 1;
-                        if (p.dir === 3) p.x -= 1;
+                        if (p.dir === 0) p.y -= 1; if (p.dir === 1) p.x += 1;
+                        if (p.dir === 2) p.y += 1; if (p.dir === 3) p.x -= 1;
 
-                        // Check collision
-                        if (p.x < 0 || p.x >= CANVAS_W/10 || p.y < 0 || p.y >= CANVAS_H/10 || state.grid[p.x][p.y] !== -1) {
-                            p.alive = false;
-                        } else {
-                            state.grid[p.x][p.y] = p.id; // Leave trail
-                        }
+                        if (p.x < 0 || p.x >= CANVAS_W/10 || p.y < 0 || p.y >= CANVAS_H/10 || state.grid[p.x][p.y] !== -1) p.alive = false;
+                        else state.grid[p.x][p.y] = p.id; 
                     });
-
                     if (aliveCount <= 1 && state.players.length > 1) {
                         state.winner = lastAlive;
                         if(lastAlive !== -1) state.scores[lastAlive]++;
                     }
                 },
                 render: function(ctx, state) {
-                    // For Tron, we don't clear the full screen every frame, we draw the whole grid to ensure trails remain visible even for late syncs
-                    ctx.fillStyle = '#1e293b';
-                    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-                    
+                    ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
                     for(let x=0; x<CANVAS_W/10; x++) {
                         for(let y=0; y<CANVAS_H/10; y++) {
-                            if (state.grid[x][y] !== -1) {
-                                drawRect(ctx, x*10, y*10, 10, 10, COLORS[state.grid[x][y] % COLORS.length]);
-                            }
+                            if (state.grid[x][y] !== -1) drawRect(ctx, x*10, y*10, 10, 10, COLORS[state.grid[x][y] % COLORS.length]);
                         }
                     }
-
-                    // Highlight heads
-                    state.players.forEach(p => {
-                        if (p.alive) {
-                            drawRect(ctx, p.x*10, p.y*10, 10, 10, '#ffffff');
-                        }
-                    });
-
+                    state.players.forEach(p => { if (p.alive) drawRect(ctx, p.x*10, p.y*10, 10, 10, '#ffffff'); });
                     if (state.winner !== -1) {
-                        ctx.fillStyle = "rgba(0,0,0,0.7)";
-                        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-                        ctx.fillStyle = COLORS[state.winner % COLORS.length] || '#fff';
-                        ctx.font = "40px sans-serif";
-                        ctx.textAlign = "center";
+                        ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+                        ctx.fillStyle = state.winner !== -1 ? COLORS[state.winner % COLORS.length] : '#fff';
+                        ctx.font = "40px sans-serif"; ctx.textAlign = "center";
                         ctx.fillText(state.winner !== -1 ? `Player ${state.winner+1} Wins!` : "Draw!", CANVAS_W/2, CANVAS_H/2);
                     }
                 }
             },
 
-            // 2. COIN DASH - Top down collector
             dash: {
                 init: function() {
-                    const count = Object.keys(playersMap).length;
-                    return {
-                        players: Array.from({length: count}, (_, i) => ({
-                            id: i, x: 100 + i*150, y: 100, score: 0
-                        })),
-                        coin: { x: 400, y: 300 },
-                        scores: new Array(count).fill(0)
-                    };
+                    const activeIds = Object.values(playersMap);
+                    const state = { players: [], coin: { x: 400, y: 300 }, scores: {} };
+                    activeIds.forEach((id, i) => { state.players.push({ id, x: 100 + i*150, y: 100 }); state.scores[id] = 0; });
+                    return state;
                 },
                 update: function(state, inputs) {
                     const speed = 7;
                     state.players.forEach(p => {
-                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
-                        if (inp.up) p.y -= speed;
-                        if (inp.down) p.y += speed;
-                        if (inp.left) p.x -= speed;
-                        if (inp.right) p.x += speed;
-
-                        // Bounds
-                        p.x = Math.max(15, Math.min(CANVAS_W - 15, p.x));
-                        p.y = Math.max(15, Math.min(CANVAS_H - 15, p.y));
-
-                        // Coin collision
-                        const dx = p.x - state.coin.x;
-                        const dy = p.y - state.coin.y;
-                        if (Math.sqrt(dx*dx + dy*dy) < 25) {
+                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false };
+                        if (inp.up) p.y -= speed; if (inp.down) p.y += speed;
+                        if (inp.left) p.x -= speed; if (inp.right) p.x += speed;
+                        p.x = Math.max(15, Math.min(CANVAS_W - 15, p.x)); p.y = Math.max(15, Math.min(CANVAS_H - 15, p.y));
+                        if (Math.sqrt(Math.pow(p.x - state.coin.x, 2) + Math.pow(p.y - state.coin.y, 2)) < 25) {
                             state.scores[p.id]++;
-                            state.coin.x = 50 + Math.random() * (CANVAS_W - 100);
-                            state.coin.y = 50 + Math.random() * (CANVAS_H - 100);
+                            state.coin.x = 50 + Math.random() * (CANVAS_W - 100); state.coin.y = 50 + Math.random() * (CANVAS_H - 100);
                         }
                     });
                 },
                 render: function(ctx, state) {
                     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-                    
-                    // Draw Coin (Gold with pulse)
                     const pulse = 15 + Math.sin(Date.now() / 150) * 3;
                     drawCircle(ctx, state.coin.x, state.coin.y, pulse, '#fbbf24');
                     drawCircle(ctx, state.coin.x, state.coin.y, pulse-4, '#f59e0b');
-
-                    // Draw Players
                     state.players.forEach(p => {
                         drawRect(ctx, p.x - 15, p.y - 15, 30, 30, COLORS[p.id % COLORS.length]);
-                        // Draw face
-                        ctx.fillStyle = '#fff';
-                        ctx.fillRect(p.x - 8, p.y - 8, 5, 5);
-                        ctx.fillRect(p.x + 3, p.y - 8, 5, 5);
+                        ctx.fillStyle = '#fff'; ctx.fillRect(p.x - 8, p.y - 8, 5, 5); ctx.fillRect(p.x + 3, p.y - 8, 5, 5);
                     });
                 }
             },
 
-            // 3. SUMO SMASH - Physics bump
             sumo: {
                 init: function() {
-                    const count = Object.keys(playersMap).length;
-                    return {
-                        players: Array.from({length: count}, (_, i) => {
-                            const angle = (i / count) * Math.PI * 2;
-                            return { id: i, x: 400 + Math.cos(angle)*100, y: 300 + Math.sin(angle)*100, vx: 0, vy: 0, alive: true }
-                        }),
-                        arenaRadius: 250,
-                        scores: new Array(count).fill(0)
-                    };
+                    const activeIds = Object.values(playersMap);
+                    const state = { players: [], arenaRadius: 250, scores: {} };
+                    activeIds.forEach((id, i) => {
+                        const angle = (i / activeIds.length) * Math.PI * 2;
+                        state.players.push({ id, x: 400 + Math.cos(angle)*100, y: 300 + Math.sin(angle)*100, vx: 0, vy: 0, alive: true });
+                        state.scores[id] = 0;
+                    });
+                    return state;
                 },
                 update: function(state, inputs) {
-                    const accel = 0.8;
-                    const friction = 0.94;
-                    const playerRadius = 20;
-
+                    const accel = 0.8, friction = 0.94, playerRadius = 20;
                     state.players.forEach(p => {
                         if (!p.alive) return;
-                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
-                        if (inp.up) p.vy -= accel;
-                        if (inp.down) p.vy += accel;
-                        if (inp.left) p.vx -= accel;
-                        if (inp.right) p.vx += accel;
-
-                        p.vx *= friction;
-                        p.vy *= friction;
-                        p.x += p.vx;
-                        p.y += p.vy;
-
-                        // Ringout check
-                        const distFromCenter = Math.sqrt(Math.pow(p.x - CANVAS_W/2, 2) + Math.pow(p.y - CANVAS_H/2, 2));
-                        if (distFromCenter > state.arenaRadius) {
-                            p.alive = false;
-                        }
+                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false };
+                        if (inp.up) p.vy -= accel; if (inp.down) p.vy += accel;
+                        if (inp.left) p.vx -= accel; if (inp.right) p.vx += accel;
+                        p.vx *= friction; p.vy *= friction; p.x += p.vx; p.y += p.vy;
+                        if (Math.sqrt(Math.pow(p.x - CANVAS_W/2, 2) + Math.pow(p.y - CANVAS_H/2, 2)) > state.arenaRadius) p.alive = false;
                     });
 
-                    // Collisions
                     for (let i = 0; i < state.players.length; i++) {
                         for (let j = i + 1; j < state.players.length; j++) {
                             const p1 = state.players[i], p2 = state.players[j];
                             if (!p1.alive || !p2.alive) continue;
-                            const dx = p2.x - p1.x, dy = p2.y - p1.y;
-                            const dist = Math.sqrt(dx*dx + dy*dy);
-                            
+                            const dx = p2.x - p1.x, dy = p2.y - p1.y, dist = Math.sqrt(dx*dx + dy*dy);
                             if (dist < playerRadius * 2) {
-                                // Overlap resolution
-                                const nx = dx / dist, ny = dy / dist;
-                                const overlap = (playerRadius * 2 - dist) / 2;
-                                p1.x -= nx * overlap; p1.y -= ny * overlap;
-                                p2.x += nx * overlap; p2.y += ny * overlap;
-                                
-                                // Momentum exchange
-                                const tx = p1.vx, ty = p1.vy;
-                                p1.vx = p2.vx; p1.vy = p2.vy;
-                                p2.vx = tx; p2.vy = ty;
-                                // Add extra bump
-                                p1.vx -= nx * 3; p1.vy -= ny * 3;
-                                p2.vx += nx * 3; p2.vy += ny * 3;
+                                const nx = dx / dist, ny = dy / dist, overlap = (playerRadius * 2 - dist) / 2;
+                                p1.x -= nx * overlap; p1.y -= ny * overlap; p2.x += nx * overlap; p2.y += ny * overlap;
+                                const tx = p1.vx, ty = p1.vy; p1.vx = p2.vx; p1.vy = p2.vy; p2.vx = tx; p2.vy = ty;
+                                p1.vx -= nx * 3; p1.vy -= ny * 3; p2.vx += nx * 3; p2.vy += ny * 3;
                             }
                         }
                     }
 
-                    // Score logic
                     const alivePlayers = state.players.filter(p => p.alive);
                     if (alivePlayers.length === 1 && state.players.length > 1) {
                         state.scores[alivePlayers[0].id]++;
-                        // Reset round after short delay by re-initing but keeping scores
                         state.players.forEach((p, i) => {
                             const angle = (i / state.players.length) * Math.PI * 2;
-                            p.x = 400 + Math.cos(angle)*100; p.y = 300 + Math.sin(angle)*100;
-                            p.vx = 0; p.vy = 0; p.alive = true;
+                            p.x = 400 + Math.cos(angle)*100; p.y = 300 + Math.sin(angle)*100; p.vx = 0; p.vy = 0; p.alive = true;
                         });
                     }
                 },
                 render: function(ctx, state) {
                     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-                    
-                    // Arena
                     drawCircle(ctx, CANVAS_W/2, CANVAS_H/2, state.arenaRadius, '#334155');
                     drawCircle(ctx, CANVAS_W/2, CANVAS_H/2, state.arenaRadius - 5, '#1e293b');
-                    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 4;
-                    ctx.beginPath(); ctx.arc(CANVAS_W/2, CANVAS_H/2, state.arenaRadius, 0, Math.PI*2); ctx.stroke();
-
-                    // Players
+                    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(CANVAS_W/2, CANVAS_H/2, state.arenaRadius, 0, Math.PI*2); ctx.stroke();
                     state.players.forEach(p => {
                         if (!p.alive) return;
                         drawCircle(ctx, p.x, p.y, 20, COLORS[p.id % COLORS.length]);
@@ -974,85 +879,45 @@
                 }
             },
 
-            // 4. BLASTER - Arena Shooter
             shooter: {
                 init: function() {
-                    const count = Object.keys(playersMap).length;
-                    return {
-                        players: Array.from({length: count}, (_, i) => ({
-                            id: i, x: 100 + (i%2)*600, y: 100 + Math.floor(i/2)*400, 
-                            dirX: 1, dirY: 0, cooldown: 0, hp: 5
-                        })),
-                        bullets: [],
-                        scores: new Array(count).fill(0)
-                    };
+                    const activeIds = Object.values(playersMap);
+                    const state = { players: [], bullets: [], scores: {} };
+                    activeIds.forEach((id, i) => {
+                        state.players.push({ id, x: 100 + (i%2)*600, y: 100 + Math.floor(i/2)*400, dirX: 1, dirY: 0, cooldown: 0, hp: 5 });
+                        state.scores[id] = 0;
+                    });
+                    return state;
                 },
                 update: function(state, inputs) {
-                    const speed = 5;
-                    const pRadius = 15;
-                    const bSpeed = 12;
-
+                    const speed = 5, pRadius = 15, bSpeed = 12;
                     state.players.forEach(p => {
-                        if (p.hp <= 0) {
-                            // Respawn logic
-                            p.x = 50 + Math.random()*700; p.y = 50 + Math.random()*500; p.hp = 5;
-                        }
-
+                        if (p.hp <= 0) { p.x = 50 + Math.random()*700; p.y = 50 + Math.random()*500; p.hp = 5; }
                         const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
-                        let movedX = 0, movedY = 0;
-
-                        if (inp.up) movedY = -1;
-                        if (inp.down) movedY = 1;
-                        if (inp.left) movedX = -1;
-                        if (inp.right) movedX = 1;
-
-                        if (movedX !== 0 || movedY !== 0) {
-                            p.dirX = movedX; p.dirY = movedY;
-                            // Normalize direction
-                            const mag = Math.sqrt(p.dirX*p.dirX + p.dirY*p.dirY);
+                        let mx = 0, my = 0;
+                        if (inp.up) my = -1; if (inp.down) my = 1; if (inp.left) mx = -1; if (inp.right) mx = 1;
+                        if (mx !== 0 || my !== 0) {
+                            p.dirX = mx; p.dirY = my; const mag = Math.sqrt(p.dirX*p.dirX + p.dirY*p.dirY);
                             p.dirX /= mag; p.dirY /= mag;
                         }
-
-                        p.x += movedX * speed;
-                        p.y += movedY * speed;
-                        p.x = Math.max(pRadius, Math.min(CANVAS_W - pRadius, p.x));
-                        p.y = Math.max(pRadius, Math.min(CANVAS_H - pRadius, p.y));
-
+                        p.x += mx * speed; p.y += my * speed;
+                        p.x = Math.max(pRadius, Math.min(CANVAS_W - pRadius, p.x)); p.y = Math.max(pRadius, Math.min(CANVAS_H - pRadius, p.y));
                         if (p.cooldown > 0) p.cooldown--;
-
                         if (inp.action && p.cooldown <= 0) {
-                            state.bullets.push({
-                                x: p.x + p.dirX*20, y: p.y + p.dirY*20,
-                                vx: p.dirX * bSpeed, vy: p.dirY * bSpeed,
-                                owner: p.id
-                            });
-                            p.cooldown = 15; // Half second cooldown at 30fps
+                            state.bullets.push({ x: p.x + p.dirX*20, y: p.y + p.dirY*20, vx: p.dirX * bSpeed, vy: p.dirY * bSpeed, owner: p.id });
+                            p.cooldown = 15; 
                         }
                     });
 
-                    // Update bullets
                     for (let i = state.bullets.length - 1; i >= 0; i--) {
-                        let b = state.bullets[i];
-                        b.x += b.vx; b.y += b.vy;
-                        
-                        // Bounds
-                        if (b.x < 0 || b.x > CANVAS_W || b.y < 0 || b.y > CANVAS_H) {
-                            state.bullets.splice(i, 1);
-                            continue;
-                        }
-
-                        // Player hit check
+                        let b = state.bullets[i]; b.x += b.vx; b.y += b.vy;
+                        if (b.x < 0 || b.x > CANVAS_W || b.y < 0 || b.y > CANVAS_H) { state.bullets.splice(i, 1); continue; }
                         let hit = false;
                         for (let j = 0; j < state.players.length; j++) {
                             let p = state.players[j];
-                            if (p.id !== b.owner && p.hp > 0) {
-                                const dist = Math.sqrt(Math.pow(p.x - b.x, 2) + Math.pow(p.y - b.y, 2));
-                                if (dist < pRadius + 5) {
-                                    p.hp--;
-                                    if (p.hp <= 0) state.scores[b.owner]++;
-                                    hit = true;
-                                    break;
-                                }
+                            if (p.id !== b.owner && p.hp > 0 && Math.sqrt(Math.pow(p.x - b.x, 2) + Math.pow(p.y - b.y, 2)) < pRadius + 5) {
+                                p.hp--; if (p.hp <= 0) state.scores[b.owner]++;
+                                hit = true; break;
                             }
                         }
                         if (hit) state.bullets.splice(i, 1);
@@ -1060,338 +925,284 @@
                 },
                 render: function(ctx, state) {
                     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-
-                    // Grid background
                     ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
                     for(let i=0; i<CANVAS_W; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,CANVAS_H); ctx.stroke(); }
                     for(let i=0; i<CANVAS_H; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(CANVAS_W,i); ctx.stroke(); }
-
-                    // Bullets
-                    state.bullets.forEach(b => {
-                        drawCircle(ctx, b.x, b.y, 5, COLORS[b.owner % COLORS.length]);
-                    });
-
-                    // Players
+                    state.bullets.forEach(b => drawCircle(ctx, b.x, b.y, 5, COLORS[b.owner % COLORS.length]));
                     state.players.forEach(p => {
                         if (p.hp <= 0) return;
-                        
-                        // Body
                         drawCircle(ctx, p.x, p.y, 15, COLORS[p.id % COLORS.length]);
-                        
-                        // Gun barrel
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
-                        ctx.beginPath();
-                        ctx.moveTo(p.x, p.y);
-                        ctx.lineTo(p.x + p.dirX * 22, p.y + p.dirY * 22);
-                        ctx.stroke();
-
-                        // HP Bar
-                        drawRect(ctx, p.x - 15, p.y - 25, 30, 4, '#ef4444');
-                        drawRect(ctx, p.x - 15, p.y - 25, 30 * (p.hp/5), '#22c55e');
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + p.dirX * 22, p.y + p.dirY * 22); ctx.stroke();
+                        drawRect(ctx, p.x - 15, p.y - 25, 30, 4, '#ef4444'); drawRect(ctx, p.x - 15, p.y - 25, 30 * (p.hp/5), '#22c55e');
                     });
                 }
             },
 
-            // 5. CROWN TAG - Keepaway
             tag: {
                 init: function() {
-                    const count = Object.keys(playersMap).length;
-                    return {
-                        players: Array.from({length: count}, (_, i) => ({
-                            id: i, x: 200 + i*100, y: 300, isIt: i===0
-                        })),
-                        cooldown: 0, // Transfer cooldown
-                        scores: new Array(count).fill(0)
-                    };
+                    const activeIds = Object.values(playersMap);
+                    const state = { players: [], cooldown: 0, scores: {} };
+                    activeIds.forEach((id, i) => { state.players.push({ id, x: 200 + i*100, y: 300, isIt: i===0 }); state.scores[id] = 0; });
+                    return state;
                 },
                 update: function(state, inputs) {
-                    const speed = 6;
-                    const itSpeed = 6.5; // Crown wearer moves slightly faster
-
+                    const speed = 6, itSpeed = 6.5;
                     if (state.cooldown > 0) state.cooldown--;
-
                     let currentIt = state.players.find(p => p.isIt);
-                    if(currentIt) {
-                        // Crown wearer gains points slowly
-                        state.scores[currentIt.id] += 1;
-                    }
+                    if(currentIt) state.scores[currentIt.id] += 1;
 
                     state.players.forEach(p => {
-                        const s = p.isIt ? itSpeed : speed;
-                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
-                        if (inp.up) p.y -= s;
-                        if (inp.down) p.y += s;
-                        if (inp.left) p.x -= s;
-                        if (inp.right) p.x += s;
-
-                        p.x = Math.max(15, Math.min(CANVAS_W - 15, p.x));
-                        p.y = Math.max(15, Math.min(CANVAS_H - 15, p.y));
+                        const s = p.isIt ? itSpeed : speed, inp = inputs[p.id] || { up: false, down: false, left: false, right: false };
+                        if (inp.up) p.y -= s; if (inp.down) p.y += s; if (inp.left) p.x -= s; if (inp.right) p.x += s;
+                        p.x = Math.max(15, Math.min(CANVAS_W - 15, p.x)); p.y = Math.max(15, Math.min(CANVAS_H - 15, p.y));
                     });
 
-                    // Tag Collisions
                     if (state.cooldown <= 0 && currentIt) {
                         for (let p of state.players) {
-                            if (p.id !== currentIt.id) {
-                                const dist = Math.sqrt(Math.pow(p.x - currentIt.x, 2) + Math.pow(p.y - currentIt.y, 2));
-                                if (dist < 30) {
-                                    // Steal crown
-                                    currentIt.isIt = false;
-                                    p.isIt = true;
-                                    state.cooldown = 60; // 2 seconds safety
-                                    break;
-                                }
+                            if (p.id !== currentIt.id && Math.sqrt(Math.pow(p.x - currentIt.x, 2) + Math.pow(p.y - currentIt.y, 2)) < 30) {
+                                currentIt.isIt = false; p.isIt = true; state.cooldown = 60; break;
                             }
                         }
                     }
                 },
                 render: function(ctx, state) {
                     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-
-                    // Divide points by 30 (fps) for display logic, but actual scores track frames
                     state.players.forEach(p => {
-                        // Draw aura if IT and safe
                         if (p.isIt) {
                             ctx.fillStyle = state.cooldown > 0 ? 'rgba(255,255,255,0.4)' : 'rgba(234, 179, 8, 0.4)';
                             ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, Math.PI*2); ctx.fill();
                         }
-                        
                         drawCircle(ctx, p.x, p.y, 15, COLORS[p.id % COLORS.length]);
-
                         if (p.isIt) {
-                            // Draw Crown
-                            ctx.fillStyle = '#fbbf24';
-                            ctx.beginPath();
-                            ctx.moveTo(p.x - 10, p.y - 15);
-                            ctx.lineTo(p.x - 15, p.y - 25);
-                            ctx.lineTo(p.x - 5, p.y - 20);
-                            ctx.lineTo(p.x, p.y - 30);
-                            ctx.lineTo(p.x + 5, p.y - 20);
-                            ctx.lineTo(p.x + 15, p.y - 25);
-                            ctx.lineTo(p.x + 10, p.y - 15);
-                            ctx.closePath();
-                            ctx.fill();
+                            ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.moveTo(p.x - 10, p.y - 15); ctx.lineTo(p.x - 15, p.y - 25);
+                            ctx.lineTo(p.x - 5, p.y - 20); ctx.lineTo(p.x, p.y - 30); ctx.lineTo(p.x + 5, p.y - 20);
+                            ctx.lineTo(p.x + 15, p.y - 25); ctx.lineTo(p.x + 10, p.y - 15); ctx.closePath(); ctx.fill();
                         }
                     });
-
-                    // Render custom score conversion (points / 30 for seconds)
                     let uiHtml = '';
-                    for(let i=0; i<state.scores.length; i++) {
-                        uiHtml += `<span style="color:${COLORS[i % COLORS.length]}">P${i+1}: ${Math.floor(state.scores[i]/30)}s</span>`;
-                    }
+                    Object.keys(state.scores).forEach(id => { uiHtml += `<span style="color:${COLORS[id % COLORS.length]}">P${parseInt(id)+1}: ${Math.floor(state.scores[id]/30)}s</span>`; });
                     ui.gameUi.innerHTML = uiHtml;
                 }
             },
 
-            // 6. CLASSIC TAG - Just try to avoid being IT
             classictag: {
                 init: function() {
-                    const count = Object.keys(playersMap).length;
-                    return {
-                        players: Array.from({length: count}, (_, i) => ({
-                            id: i, x: 200 + i*150, y: 300
-                        })),
-                        itId: Math.floor(Math.random() * count),
-                        cooldown: 0,
-                        scores: new Array(count).fill(0)
-                    };
+                    const activeIds = Object.values(playersMap);
+                    const state = { players: [], itId: activeIds[Math.floor(Math.random() * activeIds.length)], cooldown: 0, scores: {} };
+                    activeIds.forEach((id, i) => { state.players.push({ id, x: 200 + i*150, y: 300 }); state.scores[id] = 0; });
+                    return state;
                 },
                 update: function(state, inputs) {
-                    const speed = 7;
-                    const itSpeed = 7.5; // IT is slightly faster
+                    const speed = 7, itSpeed = 7.5;
                     if (state.cooldown > 0) state.cooldown--;
-
                     state.players.forEach(p => {
-                        const isIt = (p.id === state.itId);
-                        const s = isIt ? itSpeed : speed;
-                        const inp = inputs[p.id] || { up: false, down: false, left: false, right: false, action: false };
-                        
-                        if (inp.up) p.y -= s;
-                        if (inp.down) p.y += s;
-                        if (inp.left) p.x -= s;
-                        if (inp.right) p.x += s;
-                        
-                        p.x = Math.max(15, Math.min(CANVAS_W - 15, p.x));
-                        p.y = Math.max(15, Math.min(CANVAS_H - 15, p.y));
-                        
-                        if (!isIt) state.scores[p.id]++; // Gain points for not being IT
+                        const isIt = (p.id === state.itId), s = isIt ? itSpeed : speed, inp = inputs[p.id] || { up: false, down: false, left: false, right: false };
+                        if (inp.up) p.y -= s; if (inp.down) p.y += s; if (inp.left) p.x -= s; if (inp.right) p.x += s;
+                        p.x = Math.max(15, Math.min(CANVAS_W - 15, p.x)); p.y = Math.max(15, Math.min(CANVAS_H - 15, p.y));
+                        if (!isIt) state.scores[p.id]++;
                     });
-
-                    // Tag Collisions
                     if (state.cooldown <= 0) {
                         const itP = state.players.find(p => p.id === state.itId);
                         for (let p of state.players) {
-                            if (p.id !== state.itId) {
-                                const dist = Math.sqrt(Math.pow(p.x - itP.x, 2) + Math.pow(p.y - itP.y, 2));
-                                if (dist < 30) {
-                                    state.itId = p.id;
-                                    state.cooldown = 60; // 2 seconds safety
-                                    break;
-                                }
+                            if (p.id !== state.itId && Math.sqrt(Math.pow(p.x - itP.x, 2) + Math.pow(p.y - itP.y, 2)) < 30) {
+                                state.itId = p.id; state.cooldown = 60; break;
                             }
                         }
                     }
                 },
                 render: function(ctx, state) {
                     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-
                     state.players.forEach(p => {
                         const isIt = (p.id === state.itId);
                         if (isIt) {
                             ctx.fillStyle = state.cooldown > 0 ? 'rgba(255,255,255,0.4)' : 'rgba(239, 68, 68, 0.4)';
                             ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, Math.PI*2); ctx.fill();
                         }
-                        
                         drawCircle(ctx, p.x, p.y, 15, COLORS[p.id % COLORS.length]);
-
-                        if (isIt) {
-                            ctx.fillStyle = '#fff';
-                            ctx.font = 'bold 14px sans-serif';
-                            ctx.textAlign = 'center';
-                            ctx.fillText("IT!", p.x, p.y - 25);
-                        }
+                        if (isIt) { ctx.fillStyle = '#fff'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.fillText("IT!", p.x, p.y - 25); }
                     });
-
                     let uiHtml = '';
-                    for(let i=0; i<state.scores.length; i++) {
-                        uiHtml += `<span style="color:${COLORS[i % COLORS.length]}">P${i+1}: ${Math.floor(state.scores[i]/30)}s</span>`;
-                    }
+                    Object.keys(state.scores).forEach(id => { uiHtml += `<span style="color:${COLORS[id % COLORS.length]}">P${parseInt(id)+1}: ${Math.floor(state.scores[id]/30)}s</span>`; });
                     ui.gameUi.innerHTML = uiHtml;
                 }
             },
 
-            // 7. GARTIC PHONE - Draw & Guess Telephone Game
+            // 7. GARTIC PHONE - Entirely Rebuilt
             gartic: {
                 init: function() {
-                    const count = Object.keys(playersMap).length;
-                    return {
-                        playersCount: count,
-                        phase: 0, // 0: prompt, 1: draw, 2: guess, 3: reveal, 4: end
-                        ready: new Array(count).fill(false),
-                        chains: Array.from({length: count}, () => ({
-                            moves: [ { type: 'text', val: '' }, { type: 'draw', lines: [] }, { type: 'text', val: '' } ]
-                        })),
-                        reveal: { chain: 0, step: 0, timer: 0 }
+                    const activeIds = Object.values(playersMap);
+                    const state = {
+                        activeIds,
+                        phase: 0,
+                        maxPhases: activeIds.length,
+                        ready: {},
+                        chains: activeIds.map(id => ({ owner: id, moves: [] })),
+                        reveal: { chainIdx: 0, step: 0, timer: 0 }
                     };
+                    activeIds.forEach(id => state.ready[id] = false);
+                    return state;
                 },
                 handleCmd: function(state, pIdx, cmd) {
+                    if (!state.activeIds.includes(pIdx)) return;
                     if (state.ready[pIdx]) return;
-                    
-                    if (state.phase === 0 && cmd.type === 'text') {
-                        state.chains[pIdx].moves[0].val = cmd.val;
-                        state.ready[pIdx] = true;
-                    } else if (state.phase === 2 && cmd.type === 'text') {
-                        const chainIdx = (pIdx + 2) % state.playersCount;
-                        state.chains[chainIdx].moves[2].val = cmd.val;
-                        state.ready[pIdx] = true;
-                    }
 
-                    if (state.phase < 3 && state.ready.every(r => r)) {
-                        state.phase++;
-                        state.ready.fill(false);
+                    const myIndex = state.activeIds.indexOf(pIdx);
+                    const P = state.maxPhases;
+                    const chainIdx = (myIndex - state.phase + P) % P;
+
+                    if (cmd.type === 'text') {
+                        state.chains[chainIdx].moves[state.phase] = { type: 'text', val: cmd.val };
+                        state.ready[pIdx] = true;
+                    } else if (cmd.type === 'clear' && state.phase % 2 === 1) {
+                        if (state.chains[chainIdx].moves[state.phase]) {
+                            state.chains[chainIdx].moves[state.phase].lines = [];
+                        }
                     }
                 },
                 update: function(state, inputs) {
-                    if (state.phase < 3) {
-                        for (let i = 0; i < state.playersCount; i++) {
-                            if (!inputs[i] && !state.ready[i]) {
-                                state.ready[i] = true;
-                                if(state.phase === 0) state.chains[i].moves[0].val = "[Disconnected]";
-                                if(state.phase === 2) {
-                                    const chainIdx = (i + 2) % state.playersCount;
-                                    state.chains[chainIdx].moves[2].val = "[Disconnected]";
-                                }
+                    const P = state.maxPhases;
+
+                    // Init drawing moves dynamically
+                    if (state.phase < P && state.phase % 2 === 1) {
+                        state.activeIds.forEach((id, myIndex) => {
+                            const chainIdx = (myIndex - state.phase + P) % P;
+                            if (!state.chains[chainIdx].moves[state.phase]) {
+                                state.chains[chainIdx].moves[state.phase] = { type: 'draw', lines: [] };
                             }
-                        }
-                        if (state.ready.every(r => r)) {
-                            state.phase++;
-                            state.ready.fill(false);
-                        }
+                        });
                     }
 
-                    if (state.phase === 1) { // Drawing phase
-                        for (let i = 0; i < state.playersCount; i++) {
-                            if (state.ready[i]) continue;
-                            const inp = inputs[i] || { action: false, md: false, mx: 0, my: 0 };
-                            const chainIdx = (i + 1) % state.playersCount;
-                            const lines = state.chains[chainIdx].moves[1].lines;
-
-                            if (inp.action) { // Spacebar to finish drawing
-                                state.ready[i] = true;
-                                continue;
-                            }
-
-                            if (inp.md) {
-                                const lastPt = lines[lines.length - 1];
-                                // Add point if moved enough to save network bandwidth
-                                if (!lastPt || !lastPt.md || Math.abs(lastPt.x - inp.mx) > 2 || Math.abs(lastPt.y - inp.my) > 2) {
-                                    lines.push({ x: inp.mx, y: inp.my, md: true, c: COLORS[i % COLORS.length] });
+                    if (state.phase < P) {
+                        // Handle disconnected players auto-skip
+                        state.activeIds.forEach((id, myIndex) => {
+                            if (!inputs[id] && !state.ready[id]) {
+                                state.ready[id] = true;
+                                const chainIdx = (myIndex - state.phase + P) % P;
+                                if (state.phase % 2 === 0) {
+                                    state.chains[chainIdx].moves[state.phase] = { type: 'text', val: "[Disconnected]" };
                                 }
-                            } else if (lines.length > 0 && lines[lines.length - 1].md) {
-                                lines.push({ x: inp.mx, y: inp.my, md: false }); // Break stroke
                             }
+                        });
+
+                        // Draw logic
+                        if (state.phase % 2 === 1) {
+                            state.activeIds.forEach((id, myIndex) => {
+                                if (state.ready[id]) return;
+                                const inp = inputs[id];
+                                if (!inp) return;
+                                
+                                if (inp.action) { state.ready[id] = true; return; }
+
+                                const chainIdx = (myIndex - state.phase + P) % P;
+                                const lines = state.chains[chainIdx].moves[state.phase].lines;
+
+                                if (inp.md) {
+                                    const lastPt = lines[lines.length - 1];
+                                    if (!lastPt || !lastPt.md || Math.abs(lastPt.x - inp.mx) > 2 || Math.abs(lastPt.y - inp.my) > 2 || lastPt.c !== inp.brushColor || lastPt.s !== inp.brushSize) {
+                                        lines.push({ x: inp.mx, y: inp.my, md: true, c: inp.brushColor, s: inp.brushSize });
+                                    }
+                                } else if (lines.length > 0 && lines[lines.length - 1].md) {
+                                    lines.push({ x: inp.mx, y: inp.my, md: false });
+                                }
+                            });
                         }
-                    } else if (state.phase === 3) { // Reveal animation
+
+                        // Advance Phase
+                        if (state.activeIds.every(id => state.ready[id])) {
+                            state.phase++;
+                            state.activeIds.forEach(id => state.ready[id] = false);
+                        }
+                    } else if (state.phase >= P) {
+                        // Reveal animation
                         state.reveal.timer++;
-                        if (state.reveal.timer > 150) { // 5 seconds per step
+                        if (state.reveal.timer > 150) { 
                             state.reveal.timer = 0;
                             state.reveal.step++;
-                            if (state.reveal.step > 2) {
+                            if (state.reveal.step > state.maxPhases) { 
                                 state.reveal.step = 0;
-                                state.reveal.chain++;
-                                if (state.reveal.chain >= state.playersCount) {
-                                    state.phase = 4; // End screen
+                                state.reveal.chainIdx++;
+                                if (state.reveal.chainIdx >= state.maxPhases) {
+                                    state.phase++; // Stop animating
                                 }
                             }
                         }
                     }
                 },
                 render: function(ctx, state) {
-                    const myIndex = playersMap[myId];
                     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
                     ui.gameUi.innerHTML = ''; // Hide standard scores
 
-                    if (myIndex === undefined) return; // Spectator
-                    
-                    if (state.phase === 0) {
-                        toggleOverlay(true, "Enter a starting phrase for others to draw:", true);
-                        if (state.ready[myIndex]) toggleOverlay(true, "Waiting for other players...", false);
-                    } else if (state.phase === 1) {
-                        const chainIdx = (myIndex + 1) % state.playersCount;
-                        toggleOverlay(true, `Draw this: "${state.chains[chainIdx].moves[0].val}"`, false);
-                        if (state.ready[myIndex]) toggleOverlay(true, "Waiting for other players to finish drawing...", false);
-                        
-                        // Draw canvas background
-                        drawRect(ctx, 50, 50, CANVAS_W - 100, CANVAS_H - 100, '#0f172a');
-                        drawGarticLines(ctx, state.chains[chainIdx].moves[1].lines);
-                        
-                        ctx.fillStyle = '#fff';
-                        ctx.font = '20px sans-serif';
-                        ctx.textAlign = 'center';
-                        if (!state.ready[myIndex]) ctx.fillText("Press SPACE when you are finished drawing", CANVAS_W/2, CANVAS_H - 15);
-                    } else if (state.phase === 2) {
-                        const chainIdx = (myIndex + 2) % state.playersCount;
-                        toggleOverlay(true, "What is this drawing?", true);
-                        if (state.ready[myIndex]) toggleOverlay(true, "Waiting for other players...", false);
-                        
-                        drawRect(ctx, 50, 50, CANVAS_W - 100, CANVAS_H - 100, '#0f172a');
-                        drawGarticLines(ctx, state.chains[chainIdx].moves[1].lines);
-                    } else if (state.phase === 3 || state.phase === 4) {
-                        toggleOverlay(false); // Hide input overlay
-                        const chain = state.chains[state.reveal.chain] || state.chains[state.playersCount-1];
-                        const step = state.phase === 4 ? 2 : state.reveal.step;
+                    const myIndex = state.activeIds.indexOf(playersMap[myId]);
+                    const P = state.maxPhases;
+
+                    if (state.phase < P) {
+                        // Spectator Check
+                        if (myIndex === -1) {
+                            toggleOverlay(false); toggleDrawingTools(false);
+                            ctx.fillStyle = '#fff'; ctx.font = '24px sans-serif'; ctx.textAlign = 'center';
+                            ctx.fillText("Game in progress... Spectating.", CANVAS_W/2, CANVAS_H/2);
+                            return;
+                        }
+
+                        const chainIdx = (myIndex - state.phase + P) % P;
+
+                        if (state.phase % 2 === 0) {
+                            toggleDrawingTools(false);
+                            if (state.phase === 0) {
+                                toggleOverlay(true, "Enter a starting phrase for others to draw:", true);
+                            } else {
+                                drawRect(ctx, 50, 50, CANVAS_W - 100, CANVAS_H - 100, '#0f172a');
+                                drawGarticLines(ctx, state.chains[chainIdx].moves[state.phase - 1].lines);
+                                toggleOverlay(true, "What is this drawing?", true);
+                            }
+                            if (state.ready[playersMap[myId]]) toggleOverlay(true, "Waiting for other players...", false);
+                        } else {
+                            toggleOverlay(false);
+                            if (state.ready[playersMap[myId]]) {
+                                toggleDrawingTools(false);
+                                toggleOverlay(true, "Waiting for others to finish drawing...", false);
+                            } else {
+                                toggleDrawingTools(true);
+                                ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center';
+                                ctx.fillText(`Draw this: "${state.chains[chainIdx].moves[state.phase - 1].val}"`, CANVAS_W/2, 35);
+                            }
+                            
+                            drawRect(ctx, 50, 50, CANVAS_W - 100, CANVAS_H - 100, '#0f172a');
+                            if (state.chains[chainIdx].moves[state.phase]) {
+                                drawGarticLines(ctx, state.chains[chainIdx].moves[state.phase].lines);
+                            }
+                            
+                            if (!state.ready[playersMap[myId]]) {
+                                ctx.fillStyle = '#94a3b8'; ctx.font = '16px sans-serif'; ctx.textAlign = 'center';
+                                ctx.fillText("Press SPACE when finished.", CANVAS_W/2, CANVAS_H - 20);
+                            }
+                        }
+                    } else {
+                        // Reveal Phase
+                        toggleOverlay(false); toggleDrawingTools(false);
+                        const cIdx = Math.min(state.reveal.chainIdx, P - 1);
+                        const chain = state.chains[cIdx];
+                        const step = state.phase > P ? P : state.reveal.step;
                         
                         ctx.fillStyle = '#fff'; ctx.font = "bold 30px sans-serif"; ctx.textAlign = "center";
-                        ctx.fillText(`Player ${Math.min(state.reveal.chain + 1, state.playersCount)}'s Telephone Chain`, CANVAS_W/2, 40);
+                        ctx.fillText(`Player ${cIdx + 1}'s Telephone Chain`, CANVAS_W/2, 40);
                         
-                        if (step >= 0 && chain.moves[0].val) {
-                            ctx.fillStyle = '#fbbf24'; ctx.fillText(`Prompt: "${chain.moves[0].val}"`, CANVAS_W/2, 90);
-                        }
-                        if (step >= 1) {
-                            drawRect(ctx, 50, 120, CANVAS_W - 100, CANVAS_H - 240, '#0f172a');
-                            drawGarticLines(ctx, chain.moves[1].lines);
-                        }
-                        if (step >= 2 && chain.moves[2].val) {
-                            ctx.fillStyle = '#22c55e'; ctx.fillText(`Final Guess: "${chain.moves[2].val}"`, CANVAS_W/2, CANVAS_H - 50);
+                        // Draw latest step in the center
+                        if (step >= 0 && step < P) {
+                            const move = chain.moves[step];
+                            if (step % 2 === 0) { // Text
+                                ctx.fillStyle = step === 0 ? '#fbbf24' : '#22c55e';
+                                ctx.font = "bold 36px sans-serif";
+                                wrapText(ctx, move.val, CANVAS_W/2, CANVAS_H/2, CANVAS_W - 100, 45);
+                                ctx.fillStyle = '#94a3b8'; ctx.font = "20px sans-serif";
+                                ctx.fillText(step === 0 ? "Original Prompt" : "Someone guessed:", CANVAS_W/2, CANVAS_H/2 - 80);
+                            } else { // Drawing
+                                drawRect(ctx, 50, 80, CANVAS_W - 100, CANVAS_H - 160, '#0f172a');
+                                drawGarticLines(ctx, move.lines);
+                            }
+                        } else if (step >= P) {
+                            ctx.fillStyle = '#3b82f6'; ctx.font = "bold 40px sans-serif";
+                            ctx.fillText("Chain Complete!", CANVAS_W/2, CANVAS_H/2);
                         }
                     }
                 }
