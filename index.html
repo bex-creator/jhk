@@ -317,10 +317,11 @@
                 if (err.type === 'unavailable-id') {
                     // Room exists! Someone is already hosting it. Let's join them.
                     peer.destroy();
-                    joinExistingRoom(roomId, index);
+                    // 500ms delay to ensure the peer connection is fully torn down before retrying
+                    setTimeout(() => joinExistingRoom(roomId, index), 500);
                 } else if (err.type === 'peer-unavailable') {
                     peer.destroy();
-                    startQuickPlay(index + 1);
+                    setTimeout(() => startQuickPlay(index + 1), 500);
                 } else {
                     console.error("Peer error:", err);
                     alert("Network error: " + err.type);
@@ -338,11 +339,24 @@
                 ]}
             });
 
+            let connTimeout; // Timeout for ghost lobbies
+
             peer.on('open', id => {
                 myId = id;
                 hostConn = peer.connect(targetRoomId, { reliable: true });
 
+                // If the host disconnected improperly, the ID exists but they won't respond. Skip them.
+                connTimeout = setTimeout(() => {
+                    if (!hostConn || !hostConn.open) {
+                        ui.status.innerText = `Status: Host ${index} unresponsive. Skipping...`;
+                        if (hostConn) hostConn.close();
+                        peer.destroy();
+                        setTimeout(() => startQuickPlay(index + 1), 500);
+                    }
+                }, 5000);
+
                 hostConn.on('open', () => {
+                    clearTimeout(connTimeout); // Connection succeeded, cancel the timeout
                     ui.status.innerText = `Status: Connected to Lobby #${index}`;
                     ui.roomIdDisplay.innerText = `Public Lobby #${index}`;
                     isHost = false;
@@ -350,6 +364,14 @@
                 });
 
                 hostConn.on('data', handleClientData);
+                
+                hostConn.on('error', err => {
+                    console.error("Host connection error:", err);
+                    clearTimeout(connTimeout);
+                    if (hostConn) hostConn.close();
+                    peer.destroy();
+                    setTimeout(() => startQuickPlay(index + 1), 500);
+                });
 
                 hostConn.on('close', () => {
                     if(!ui.panelRoom.classList.contains('hidden') || !ui.screenGame.classList.contains('hidden')) {
@@ -363,7 +385,7 @@
                 if (err.type === 'peer-unavailable') {
                     // The host disconnected right as we tried to connect
                     peer.destroy();
-                    startQuickPlay(index + 1);
+                    setTimeout(() => startQuickPlay(index + 1), 500);
                 } else {
                     console.error(err);
                     alert("Network Error: " + err.type);
@@ -431,12 +453,21 @@
                     // Automatic fallback to next room
                     hostConn.close();
                     peer.destroy();
-                    startQuickPlay(currentRoomIndex + 1);
+                    setTimeout(() => startQuickPlay(currentRoomIndex + 1), 500);
                 } else {
                     alert(data.msg);
                     resetLobby();
                 }
-            } else if (data.type === 'INIT_SYNC' || data.type === 'PLAYER_SYNC') {
+            } else if (data.type === 'INIT_SYNC') {
+                playersMap = data.playersMap;
+                updatePlayerListUI();
+                // Bug fix: If joining mid-game, ensure the canvas switches over
+                if (data.currentGame) {
+                    currentGame = data.currentGame;
+                    gameState = data.gameState;
+                    switchCanvas(data.currentGame);
+                }
+            } else if (data.type === 'PLAYER_SYNC') {
                 playersMap = data.playersMap;
                 updatePlayerListUI();
             } else if (data.type === 'START_GAME') {
