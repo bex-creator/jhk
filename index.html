@@ -2,770 +2,951 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D AR Smasher (Phone + PC)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC P2P Arcade Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- 3D Engine & Physics -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
-    
-    <!-- WebRTC for Phone-to-PC Camera Streaming -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-
-    <!-- MediaPipe for Body Tracking -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #020617; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; }
-        #game_canvas { display: block; position: absolute; top: 0; left: 0; z-index: 10; width: 100%; height: 100%; }
-        .layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .hidden { display: none !important; }
-        /* Video is hidden on PC, shown full screen on phone */
-        #received_video, #local_video { display: none; }
-        .phone-video-active { display: block !important; position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 5; opacity: 0.5; }
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        canvas { background-color: #1e293b; border: 4px solid #334155; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: none; margin: 0 auto; }
+        canvas.active { display: block; }
+        .game-btn { transition: all 0.2s ease; }
+        .game-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
     </style>
 </head>
-<body>
+<body class="flex flex-col h-screen">
 
-    <!-- Videos for WebRTC -->
-    <video id="received_video" autoplay playsinline></video>
-    <video id="local_video" autoplay playsinline muted></video>
-
-    <!-- 3D Canvas -->
-    <canvas id="game_canvas" class="hidden"></canvas>
-
-    <!-- UI Overlay: Main Menu -->
-    <div id="ui_main" class="layer bg-slate-900/90 backdrop-blur-md">
-        <h1 class="text-5xl font-black mb-8 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600">3D AR SMASHER</h1>
-        <p class="mb-10 text-slate-300 max-w-md text-center">Play on your PC screen while using your phone's camera as the motion tracker!</p>
-        
-        <div class="flex flex-col md:flex-row gap-6">
-            <button id="btn_host" class="bg-blue-600 hover:bg-blue-500 px-8 py-6 rounded-2xl font-bold text-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition transform hover:scale-105">
-                💻 AR HOST ON PC<br><span class="text-sm font-normal opacity-75">(Acts as Screen)</span>
-            </button>
-            <button id="btn_join" class="bg-emerald-600 hover:bg-emerald-500 px-8 py-6 rounded-2xl font-bold text-xl shadow-[0_0_20px_rgba(16,185,129,0.4)] transition transform hover:scale-105">
-                📱 USE PHONE<br><span class="text-sm font-normal opacity-75">(Acts as Camera)</span>
-            </button>
+    <!-- Header / Status Bar -->
+    <header class="bg-slate-800 p-4 shadow-md flex justify-between items-center z-10">
+        <h1 class="text-2xl font-bold text-blue-400">P2P Arcade Hub</h1>
+        <div id="status-bar" class="flex items-center gap-4">
+            <span id="connection-status" class="px-3 py-1 bg-slate-700 rounded text-sm">Status: Disconnected</span>
+            <button id="btn-leave" class="hidden px-4 py-1 bg-red-600 hover:bg-red-500 rounded font-bold text-sm">Leave Game</button>
         </div>
-        <button id="btn_fps" class="mt-6 bg-slate-700 hover:bg-slate-600 px-8 py-4 rounded-2xl font-bold text-xl shadow-[0_0_20px_rgba(255,255,255,0.1)] transition transform hover:scale-105">
-            🎯 FIRST-PERSON RANGE<br><span class="text-sm font-normal opacity-75">(Aim with your REAL arms!)</span>
-        </button>
-        <button id="btn_solo" class="mt-6 text-sm text-slate-400 hover:text-white underline">Just use PC Webcam instead</button>
-    </div>
+    </header>
 
-    <!-- UI Overlay: PC Host Screen -->
-    <div id="ui_host" class="layer bg-slate-900/90 backdrop-blur-md hidden">
-        <h2 class="text-3xl font-bold mb-4">PC Screen Mode</h2>
-        <p class="mb-6 text-slate-300">Open this app on your phone and enter this code:</p>
-        <div class="bg-black/50 px-8 py-4 rounded-xl border border-blue-500/50 text-6xl font-mono tracking-widest text-cyan-400 mb-8" id="room_code_display">----</div>
-        <div class="flex items-center gap-3 text-yellow-400" id="host_status">
-            <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            Waiting for phone camera...
-        </div>
-    </div>
-
-    <!-- UI Overlay: Phone Join Screen -->
-    <div id="ui_join" class="layer bg-slate-900/90 backdrop-blur-md hidden">
-        <h2 class="text-3xl font-bold mb-4">Phone Camera Mode</h2>
-        <p class="mb-6 text-slate-300">Enter the code shown on your PC screen:</p>
-        <input type="number" id="room_code_input" placeholder="1234" class="bg-black/50 text-center px-6 py-4 rounded-xl border border-emerald-500/50 text-4xl font-mono text-emerald-400 mb-6 w-48 outline-none">
-        <button id="btn_connect" class="bg-emerald-600 hover:bg-emerald-500 px-8 py-4 rounded-xl font-bold text-xl w-48 transition transform active:scale-95">Connect</button>
-        <p id="join_status" class="mt-4 text-emerald-300 hidden">Connecting to PC...</p>
-    </div>
-
-    <!-- HUD (In Game) -->
-    <div id="crosshair" class="absolute top-1/2 left-1/2 w-2 h-2 bg-white rounded-full pointer-events-none hidden z-40 transform -translate-x-1/2 -translate-y-1/2 shadow-[0_0_5px_rgba(0,0,0,1)]"></div>
-    <div id="ui_hud" class="absolute top-0 left-0 w-full p-6 pointer-events-none hidden z-30 flex justify-between">
-        <div class="bg-black/40 backdrop-blur px-6 py-2 rounded-xl border border-white/10 text-3xl font-black text-cyan-400 drop-shadow-md">
-            SCORE: <span id="score_val" class="text-white">0</span>
-        </div>
-        <div class="bg-black/40 backdrop-blur px-6 py-2 rounded-xl border border-white/10 text-sm text-right max-w-xs">
-            You are holding a pistol.<br><b>POINT</b> your arm to aim.<br><b>SQUEEZE</b> your hand to shoot!
-        </div>
-    </div>
-
-<script>
-    // ==========================================
-    // GAME STATE & CONSTANTS
-    // ==========================================
-    const STATE = { mode: null, score: 0, isGrabbing: false, activeHand: null, isFPS: false };
-    let peer = null, mediaStream = null, pose = null;
-    let pitch = 0, yaw = 0;
-    
-    // Physics & 3D vars
-    let world, scene, camera, renderer;
-    let handLeftBody, handRightBody, headBody;
-    let handLeftMesh, handRightMesh, headMesh;
-    let pistolBody, pistolMesh, pistolConstraint;
-    let boxes = [];
-    let particles = [];
-    let bullets = [];
-    let bodyBones = {};
-    let lastTime = 0;
-    let lastShootTime = 0;
-
-    // Pose Targets mapped to 3D space
-    const POSE3D = {
-        left: null, right: null, head: null, 
-        leftElbow: null, rightElbow: null, 
-        leftShoulder: null, rightShoulder: null,
-        leftHip: null, rightHip: null,
-        leftKnee: null, rightKnee: null,
-        leftAnkle: null, rightAnkle: null,
-        leftShoot: false, rightShoot: false,
-        visible: false
-    };
-
-    // UI Elements
-    const uiMain = document.getElementById('ui_main');
-    const uiHost = document.getElementById('ui_host');
-    const uiJoin = document.getElementById('ui_join');
-    const uiHud = document.getElementById('ui_hud');
-    const canvas = document.getElementById('game_canvas');
-    const vidRecv = document.getElementById('received_video');
-    const vidLocal = document.getElementById('local_video');
-    const scoreVal = document.getElementById('score_val');
-
-    // ==========================================
-    // NETWORKING (PEERJS) - PHONE TO PC
-    // ==========================================
-    
-    document.getElementById('btn_host').addEventListener('click', () => initHost(false));
-    document.getElementById('btn_join').addEventListener('click', () => {
-        uiMain.classList.add('hidden');
-        uiJoin.classList.remove('hidden');
-    });
-    document.getElementById('btn_solo').addEventListener('click', () => startPCWebcam());
-    document.getElementById('btn_fps').addEventListener('click', () => initHost(true));
-
-    // --- PC HOST MODE ---
-    function initHost(isFPS) {
-        STATE.isFPS = isFPS;
-        uiMain.classList.add('hidden');
-        uiHost.classList.remove('hidden');
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col items-center justify-center p-4 relative">
         
-        const code = Math.floor(1000 + Math.random() * 9000).toString();
-        document.getElementById('room_code_display').innerText = code;
-        const peerId = `ar-smasher-${code}`;
-        
-        peer = new Peer(peerId);
-        
-        peer.on('open', (id) => {
-            console.log('PC Host Ready:', id);
-        });
-
-        // When phone calls
-        peer.on('call', (call) => {
-            document.getElementById('host_status').innerText = "Phone connected! Starting engine...";
-            call.answer(); // Answer automatically
-            call.on('stream', (remoteStream) => {
-                // We got the phone camera!
-                vidRecv.srcObject = remoteStream;
-                startEngine(vidRecv);
-            });
-        });
-        
-        peer.on('error', (err) => alert("Network error: " + err));
-    }
-
-    // --- PHONE CAMERA MODE ---
-    document.getElementById('btn_connect').addEventListener('click', async () => {
-        const code = document.getElementById('room_code_input').value;
-        if(code.length !== 4) return alert("Enter 4 digit code");
-        
-        document.getElementById('join_status').classList.remove('hidden');
-        
-        try {
-            // Get Phone Camera (Front facing usually preferred so user can look at PC while playing)
-            mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: 'user', width: {ideal: 640}, height: {ideal: 480} }, 
-                audio: false 
-            });
+        <!-- Setup & Lobby Screen -->
+        <div id="screen-lobby" class="bg-slate-800 p-8 rounded-xl shadow-2xl max-w-2xl w-full text-center">
             
-            // Show camera on phone
-            vidLocal.srcObject = mediaStream;
-            vidLocal.classList.add('phone-video-active');
-            
-            peer = new Peer();
-            peer.on('open', (id) => {
-                const targetId = `ar-smasher-${code}`;
-                const call = peer.call(targetId, mediaStream);
+            <!-- Connection Phase -->
+            <div id="panel-connect">
+                <h2 class="text-4xl font-extrabold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Quick Matchmaking</h2>
+                <div class="bg-slate-700 p-8 rounded-lg border border-slate-600 shadow-inner">
+                    <p class="text-lg text-slate-300 mb-8">Click below to automatically find and join an active public lobby, or host a new one if none are available.</p>
+                    <button id="btn-quick-play" class="w-full max-w-md mx-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 py-4 rounded-xl font-bold text-2xl shadow-[0_0_15px_rgba(79,70,229,0.5)] transition-all transform hover:scale-105 active:scale-95 text-white flex items-center justify-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Find Game
+                    </button>
+                </div>
+            </div>
+
+            <!-- Waiting / Game Selection Phase -->
+            <div id="panel-room" class="hidden">
+                <h2 class="text-3xl font-extrabold mb-2">Arcade Room</h2>
+                <div id="room-id-display" class="inline-block bg-slate-900 px-6 py-2 rounded-lg text-yellow-400 font-bold text-xl mb-6 border border-slate-600 shadow-inner">Public Lobby</div>
                 
-                call.on('error', () => alert("Could not connect to PC. Check code."));
-                
-                document.getElementById('ui_join').innerHTML = `
-                    <div class="bg-black/70 p-6 rounded-xl text-center backdrop-blur z-20 mt-20">
-                        <h2 class="text-3xl text-emerald-400 font-bold mb-2">Streaming...</h2>
-                        <p class="text-white mb-4">Look at your PC screen to play!</p>
-                        <p class="text-sm text-slate-300">Prop your phone up so it can see your upper body.</p>
+                <div class="mb-6 bg-slate-700 p-4 rounded-lg">
+                    <h4 class="font-bold mb-2">Players (<span id="player-count">1</span>/4)</h4>
+                    <div id="player-list" class="flex justify-center gap-4 flex-wrap">
+                        <!-- Player badges will appear here -->
                     </div>
-                `;
-            });
-        } catch(err) {
-            alert("Camera access denied! Please allow permissions.");
-        }
-    });
+                </div>
 
-    // --- PC SOLO MODE (Fallback) ---
-    async function startPCWebcam() {
-        STATE.isFPS = false; // Default to AR mode for PC webcam fallback
-        uiMain.classList.add('hidden');
-        try {
-            mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }});
-            vidRecv.srcObject = mediaStream;
-            startEngine(vidRecv);
-        } catch(err) {
-            alert("No webcam found.");
-        }
-    }
+                <!-- Host Controls -->
+                <div id="host-controls" class="hidden">
+                    <h3 class="text-xl font-bold mb-4 border-b border-slate-600 pb-2">Select a Game</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <button onclick="startGame('tron')" class="game-btn bg-purple-600 hover:bg-purple-500 py-3 rounded-lg font-bold">Lightcycles</button>
+                        <button onclick="startGame('dash')" class="game-btn bg-yellow-600 hover:bg-yellow-500 py-3 rounded-lg font-bold">Coin Dash</button>
+                        <button onclick="startGame('sumo')" class="game-btn bg-orange-600 hover:bg-orange-500 py-3 rounded-lg font-bold">Sumo Smash</button>
+                        <button onclick="startGame('shooter')" class="game-btn bg-red-600 hover:bg-red-500 py-3 rounded-lg font-bold">Blaster</button>
+                        <button onclick="startGame('tag')" class="game-btn bg-teal-600 hover:bg-teal-500 py-3 rounded-lg font-bold">Crown Tag</button>
+                    </div>
+                </div>
 
+                <!-- Client View -->
+                <div id="client-waiting" class="hidden text-slate-400 italic py-8">
+                    Waiting for the host to select a game...
+                </div>
+            </div>
+        </div>
 
-    // ==========================================
-    // AI POSE TRACKING (MEDIAPIPE)
-    // ==========================================
-    function startEngine(videoSource) {
-        uiHost.classList.add('hidden');
-        uiMain.classList.add('hidden');
-        uiHud.classList.remove('hidden');
-        canvas.classList.remove('hidden');
-        
-        if (STATE.isFPS) {
-            document.getElementById('crosshair').classList.remove('hidden');
-            document.querySelector('#ui_hud div:nth-child(2)').innerHTML = `Target Range Mode.<br><b>POINT</b> your arm to aim the laser.<br><b>SQUEEZE</b> your hand to shoot!`;
-        } else {
-            document.getElementById('crosshair').classList.add('hidden');
-            document.querySelector('#ui_hud div:nth-child(2)').innerHTML = `You are holding a pistol.<br><b>POINT</b> your arm to aim.<br><b>SQUEEZE</b> your hand to shoot!`;
-        }
-        
-        // Init 3D World first
-        init3D();
-        
-        // Spawn initial targets for FPS mode
-        if (STATE.isFPS) spawnTargets(15);
-        
-        // Init AI
-        pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
-        pose.setOptions({
-            modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false,
-            minDetectionConfidence: 0.5, minTrackingConfidence: 0.5
-        });
-        
-        pose.onResults((results) => {
-            if (results.poseLandmarks) {
-                POSE3D.visible = true;
-                const lm = results.poseLandmarks;
-                
-                // Map 2D landmarks to 3D space. Scaled up to fit a full body.
-                // INCREASED Z-DEPTH MULTIPLIER to make pushing arms forward more realistic
-                const map3D = (idx, yOffset = 0) => {
-                    return new THREE.Vector3(
-                        -(lm[idx].x - 0.5) * 45, // Mirrored X, scaled wider
-                        -(lm[idx].y - 0.5) * 40 + 20 + yOffset, // Inverted Y, scaled for full body
-                        (lm[idx].z || 0) * -45 // Enhanced Z depth for better aiming
-                    );
-                };
-
-                POSE3D.head = map3D(0, 5); // Nose, shift up slightly
-                POSE3D.right = map3D(15);  
-                POSE3D.left = map3D(16);   
-                POSE3D.rightElbow = map3D(13);
-                POSE3D.leftElbow = map3D(14);
-                POSE3D.rightShoulder = map3D(11);
-                POSE3D.leftShoulder = map3D(12);
-                
-                // New Full Body Landmarks
-                POSE3D.rightHip = map3D(23);
-                POSE3D.leftHip = map3D(24);
-                POSE3D.rightKnee = map3D(25);
-                POSE3D.leftKnee = map3D(26);
-                POSE3D.rightAnkle = map3D(27);
-                POSE3D.leftAnkle = map3D(28);
-
-                // Shoot Detection (Distance between wrist and index knuckle)
-                const getDist2D = (idx1, idx2) => Math.hypot(lm[idx1].x - lm[idx2].x, lm[idx1].y - lm[idx2].y);
-                
-                // Finger curls/holds down = landmarks move closer together to form a fist/trigger pull
-                POSE3D.rightShoot = getDist2D(15, 19) < 0.05;
-                POSE3D.leftShoot = getDist2D(16, 20) < 0.05;
-
-            } else {
-                POSE3D.visible = false;
-            }
-        });
-
-        // Create a loop to send video frames to MediaPipe
-        async function captureFrame() {
-            if(videoSource.readyState >= 2) {
-                await pose.send({image: videoSource});
-            }
-            requestAnimationFrame(captureFrame);
-        }
-        captureFrame();
-
-        // Start render loop
-        requestAnimationFrame(renderLoop);
-        
-        // Spawn boxes
-        setInterval(() => {
-            if (!STATE.isFPS) spawnTargets(1);
-        }, 1500);
-    }
-
-
-    // ==========================================
-    // 3D GRAPHICS & PHYSICS (THREE.JS + CANNON.JS)
-    // ==========================================
-    function init3D() {
-        // --- 1. Physics Setup (Cannon.js) ---
-        world = new CANNON.World();
-        world.gravity.set(0, -15, 0); // Fast falling
-        world.broadphase = new CANNON.NaiveBroadphase();
-        world.solver.iterations = 10;
-
-        // Ground Plane (Physics)
-        const groundShape = new CANNON.Plane();
-        const groundBody = new CANNON.Body({ mass: 0 }); // 0 mass = static
-        groundBody.addShape(groundShape);
-        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
-        world.addBody(groundBody);
-
-        // Physics Materials
-        const physicsMat = new CANNON.Material();
-        const contactMat = new CANNON.ContactMaterial(physicsMat, physicsMat, { friction: 0.1, restitution: 0.5 });
-        world.addContactMaterial(contactMat);
-
-        // Player Hands & Head (Kinematic bodies driven by AI)
-        const handShape = new CANNON.Sphere(1.5);
-        handLeftBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: physicsMat });
-        handRightBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: physicsMat });
-        headBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: physicsMat });
-        handLeftBody.addShape(handShape); handRightBody.addShape(handShape); headBody.addShape(new CANNON.Sphere(2.5));
-        
-        world.addBody(handLeftBody); world.addBody(handRightBody); world.addBody(headBody);
-
-        // The Pistol (Kinematic Body so we can aim it directly with the arm vector)
-        const pistolShape = new CANNON.Box(new CANNON.Vec3(0.5, 1.5, 2));
-        pistolBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: physicsMat });
-        pistolBody.addShape(pistolShape);
-        pistolBody.position.set(0, 0, 0);
-        world.addBody(pistolBody);
-
-        STATE.isGrabbing = true;
-        STATE.activeHand = 'right';
-
-        // --- 2. Graphics Setup (Three.js) ---
-        scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020617, 0.015);
-
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 20, 45); 
-        camera.lookAt(0, 15, 0);
-
-        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        // Lights
-        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambient);
-        const spotLight = new THREE.SpotLight(0x06b6d4, 2.0); // Cyan light
-        spotLight.position.set(0, 50, 20);
-        spotLight.target.position.set(0, 0, 0);
-        spotLight.castShadow = true;
-        scene.add(spotLight);
-        scene.add(spotLight.target);
-        
-        // Expose spotlight globally for muzzle flashes
-        window.spotLight = spotLight; 
-
-        // Graphics: Environment Grid
-        const gridHelper = new THREE.GridHelper(200, 100, 0x06b6d4, 0x0f172a);
-        gridHelper.position.y = 0;
-        scene.add(gridHelper);
-
-        // ==========================================
-        // REALISTIC AVATAR MATERIALS & MESHES
-        // ==========================================
-        // High-end tactical armor PBR material
-        const armorMat = new THREE.MeshPhysicalMaterial({ 
-            color: 0x0f172a, metalness: 0.8, roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.2 
-        });
-        const glowMat = new THREE.MeshStandardMaterial({ 
-            color: 0x0ea5e9, emissive: 0x0ea5e9, emissiveIntensity: 2.0 
-        });
-
-        // Hands
-        handLeftMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), armorMat); scene.add(handLeftMesh);
-        handRightMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), armorMat); scene.add(handRightMesh);
-        
-        // Realistic Helmet Head
-        headMesh = new THREE.Group();
-        const helmet = new THREE.Mesh(new THREE.BoxGeometry(4, 5, 4.5), armorMat);
-        // Visor
-        const visor = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.5, 4.6), glowMat);
-        visor.position.set(0, 0.5, 0);
-        helmet.add(visor);
-        headMesh.add(helmet);
-        scene.add(headMesh);
-
-        // Thick, Exoskeleton-style tapered bones
-        const createExoBone = (rTop, rBot) => {
-            const mesh = new THREE.Group();
-            const cylinder = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, 1, 16), armorMat);
-            cylinder.castShadow = true;
-            mesh.add(cylinder);
+        <!-- Game Canvases Area -->
+        <div id="screen-game" class="hidden w-full h-full flex flex-col items-center justify-center">
             
-            // Add glowing rings to joints for sci-fi look
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(rTop + 0.1, 0.1, 8, 16), glowMat);
-            ring.rotation.x = Math.PI/2;
-            ring.position.y = 0.4;
-            mesh.add(ring);
-            
-            scene.add(mesh);
-            return mesh;
+            <!-- Contextual Game UI overlay (scores etc) -->
+            <div id="game-ui" class="absolute top-20 flex gap-6 text-xl font-bold bg-slate-800/80 px-6 py-2 rounded-full backdrop-blur-sm z-10">
+                <!-- Scores injected here -->
+            </div>
+
+            <!-- The 5 Different Canvases -->
+            <canvas id="canvas-tron" width="800" height="600"></canvas>
+            <canvas id="canvas-dash" width="800" height="600"></canvas>
+            <canvas id="canvas-sumo" width="800" height="600"></canvas>
+            <canvas id="canvas-shooter" width="800" height="600"></canvas>
+            <canvas id="canvas-tag" width="800" height="600"></canvas>
+
+            <div class="mt-4 text-slate-400 text-sm">
+                Controls: <kbd class="bg-slate-700 px-2 py-1 rounded">W A S D</kbd> or <kbd class="bg-slate-700 px-2 py-1 rounded">Arrows</kbd> to move. <kbd class="bg-slate-700 px-2 py-1 rounded">Space</kbd> to action/shoot.
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- CONSTANTS & GLOBALS ---
+        const CANVAS_W = 800;
+        const CANVAS_H = 600;
+        const FPS = 30;
+        const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']; // Red, Blue, Green, Yellow
+
+        let peer = null;
+        let myId = null;
+        let isHost = false;
+        let hostConn = null; // Client's connection to host
+        let clients = {};    // Host's map of connected clients (id -> connection)
+        
+        let currentGame = null;
+        let hostLoopInterval = null;
+        
+        // State variables
+        let playersMap = {}; // Maps peerId -> player index (0-3)
+        let playerInputs = {}; // Maps index -> current input state
+        let gameState = {}; // The authoritative game state
+
+        // Local Input
+        const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false, ' ': false };
+        let myInput = { up: false, down: false, left: false, right: false, action: false };
+        let currentRoomIndex = 1;
+        const MAX_ROOMS = 50; // Max public matchmaking slots
+
+        // DOM Elements
+        const ui = {
+            screenLobby: document.getElementById('screen-lobby'),
+            screenGame: document.getElementById('screen-game'),
+            panelConnect: document.getElementById('panel-connect'),
+            panelRoom: document.getElementById('panel-room'),
+            hostControls: document.getElementById('host-controls'),
+            clientWaiting: document.getElementById('client-waiting'),
+            roomIdDisplay: document.getElementById('room-id-display'),
+            playerList: document.getElementById('player-list'),
+            playerCount: document.getElementById('player-count'),
+            status: document.getElementById('connection-status'),
+            btnLeave: document.getElementById('btn-leave'),
+            btnQuickPlay: document.getElementById('btn-quick-play'),
+            gameUi: document.getElementById('game-ui'),
+            canvases: {
+                tron: document.getElementById('canvas-tron'),
+                dash: document.getElementById('canvas-dash'),
+                sumo: document.getElementById('canvas-sumo'),
+                shooter: document.getElementById('canvas-shooter'),
+                tag: document.getElementById('canvas-tag')
+            }
         };
 
-        bodyBones = {
-            // Arms (Tapered down to wrist)
-            leftUpper: createExoBone(1.4, 1.0), leftLower: createExoBone(1.0, 0.8),
-            rightUpper: createExoBone(1.4, 1.0), rightLower: createExoBone(1.0, 0.8),
-            // Torso Frame
-            torsoTop: createExoBone(2.5, 2.5), torsoBottom: createExoBone(2.0, 2.0),
-            torsoLeft: createExoBone(1.5, 1.5), torsoRight: createExoBone(1.5, 1.5),
-            // Legs (Thick thighs tapering to ankles)
-            leftUpperLeg: createExoBone(1.8, 1.3), leftLowerLeg: createExoBone(1.3, 1.0),
-            rightUpperLeg: createExoBone(1.8, 1.3), rightLowerLeg: createExoBone(1.3, 1.0)
-        };
+        // --- INPUT HANDLING ---
+        function updateInput() {
+            myInput.up = keys.ArrowUp || keys.w;
+            myInput.down = keys.ArrowDown || keys.s;
+            myInput.left = keys.ArrowLeft || keys.a;
+            myInput.right = keys.ArrowRight || keys.d;
+            myInput.action = keys[' '];
 
-        // Graphics: Realistic Pistol
-        pistolMesh = new THREE.Group();
-        const gunMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.9 });
-        
-        // Barrel
-        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 4), gunMat);
-        barrel.position.set(0, 0.8, 1);
-        barrel.castShadow = true;
-        pistolMesh.add(barrel);
-        
-        // Grip
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.5, 1.2), gunMat);
-        grip.position.set(0, -0.5, -0.5);
-        grip.rotation.x = -Math.PI / 10;
-        pistolMesh.add(grip);
+            if (isHost && myId) {
+                playerInputs[playersMap[myId]] = { ...myInput };
+            } else if (!isHost && hostConn && hostConn.open) {
+                hostConn.send({ type: 'INPUT', input: myInput });
+            }
+        }
+        window.addEventListener('keydown', e => { 
+            if (keys.hasOwnProperty(e.key) && !keys[e.key]) { keys[e.key] = true; updateInput(); }
+        });
+        window.addEventListener('keyup', e => { 
+            if (keys.hasOwnProperty(e.key)) { keys[e.key] = false; updateInput(); }
+        });
 
-        // Laser Sight (Crucial for aiming with real arms)
-        const laserMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.7 });
-        const laser = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 200), laserMat);
-        laser.position.set(0, 0.8, 101); // Positioned protruding out of the barrel
-        laser.rotation.x = Math.PI / 2; // Align with Z axis
-        pistolMesh.add(laser);
+        // --- NETWORK & MATCHMAKING SETUP ---
+        document.getElementById('btn-quick-play').addEventListener('click', () => {
+            ui.btnQuickPlay.disabled = true;
+            ui.btnQuickPlay.innerHTML = `<svg class="animate-spin -ml-1 mr-3 h-6 w-6 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Searching...`;
+            startQuickPlay(1);
+        });
 
-        scene.add(pistolMesh);
+        function startQuickPlay(index) {
+            currentRoomIndex = index;
+            if(index > MAX_ROOMS) {
+                alert("All public matchmaking slots are currently full! Please try again later.");
+                resetLobby();
+                return;
+            }
 
-        // Collision Event detection (CannonJS)
-        pistolBody.addEventListener("collide", (e) => {
-            const relVel = e.contact.getImpactVelocityAlongNormal();
-            if(Math.abs(relVel) > 15 && e.body.userData && e.body.userData.isBox) {
-                breakBox(e.body.userData.id);
+            ui.status.innerText = `Status: Checking lobby ${index}...`;
+            const roomId = `p2p-arcade-public-v1-${index}`; // Predictable ID
+
+            // Attempt to claim this ID and become the host
+            peer = new Peer(roomId, {
+                config: {'iceServers': [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478?transport=udp' }
+                ]}
+            });
+
+            peer.on('open', id => {
+                // Successfully claimed the ID -> We are the host!
+                isHost = true;
+                myId = id;
+                ui.status.innerText = `Status: Hosting Lobby #${index}`;
+                ui.roomIdDisplay.innerText = `Public Lobby #${index}`;
+                setupHostLobby();
+            });
+
+            peer.on('error', err => {
+                if (err.type === 'unavailable-id') {
+                    // Room exists! Someone is already hosting it. Let's join them.
+                    peer.destroy();
+                    joinExistingRoom(roomId, index);
+                } else if (err.type === 'peer-unavailable') {
+                    peer.destroy();
+                    startQuickPlay(index + 1);
+                } else {
+                    console.error("Peer error:", err);
+                    alert("Network error: " + err.type);
+                    resetLobby();
+                }
+            });
+        }
+
+        function joinExistingRoom(targetRoomId, index) {
+            ui.status.innerText = `Status: Joining lobby ${index}...`;
+            peer = new Peer({
+                config: {'iceServers': [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478?transport=udp' }
+                ]}
+            });
+
+            peer.on('open', id => {
+                myId = id;
+                hostConn = peer.connect(targetRoomId, { reliable: true });
+
+                hostConn.on('open', () => {
+                    ui.status.innerText = `Status: Connected to Lobby #${index}`;
+                    ui.roomIdDisplay.innerText = `Public Lobby #${index}`;
+                    isHost = false;
+                    setupClientLobby();
+                });
+
+                hostConn.on('data', handleClientData);
+
+                hostConn.on('close', () => {
+                    if(!ui.panelRoom.classList.contains('hidden') || !ui.screenGame.classList.contains('hidden')) {
+                        alert("Host disconnected.");
+                        resetLobby();
+                    }
+                });
+            });
+
+            peer.on('error', err => {
+                if (err.type === 'peer-unavailable') {
+                    // The host disconnected right as we tried to connect
+                    peer.destroy();
+                    startQuickPlay(index + 1);
+                } else {
+                    console.error(err);
+                    alert("Network Error: " + err.type);
+                    resetLobby();
+                }
+            });
+        }
+
+        function setupHostLobby() {
+            ui.panelConnect.classList.add('hidden');
+            ui.panelRoom.classList.remove('hidden');
+            ui.hostControls.classList.remove('hidden');
+            ui.clientWaiting.classList.add('hidden');
+            ui.btnLeave.classList.remove('hidden');
+            
+            addPlayer(myId);
+
+            peer.on('connection', conn => {
+                if (Object.keys(clients).length >= 3) {
+                    conn.send({ type: 'ERROR', msg: 'Room is full' });
+                    setTimeout(() => conn.close(), 500);
+                    return;
+                }
+
+                conn.on('open', () => {
+                    clients[conn.peer] = conn;
+                    addPlayer(conn.peer);
+                    
+                    conn.send({ 
+                        type: 'INIT_SYNC', 
+                        playersMap: playersMap,
+                        currentGame: currentGame,
+                        gameState: gameState
+                    });
+                    broadcastPlayers();
+                });
+
+                conn.on('data', data => {
+                    if (data.type === 'INPUT') {
+                        playerInputs[playersMap[conn.peer]] = data.input;
+                    }
+                });
+
+                conn.on('close', () => {
+                    delete clients[conn.peer];
+                    removePlayer(conn.peer);
+                    broadcastPlayers();
+                });
+            });
+        }
+
+        function setupClientLobby() {
+            ui.panelConnect.classList.add('hidden');
+            ui.panelRoom.classList.remove('hidden');
+            ui.hostControls.classList.add('hidden');
+            ui.clientWaiting.classList.remove('hidden');
+            ui.btnLeave.classList.remove('hidden');
+        }
+
+        function handleClientData(data) {
+            if (data.type === 'ERROR') {
+                if (data.msg === 'Room is full') {
+                    // Automatic fallback to next room
+                    hostConn.close();
+                    peer.destroy();
+                    startQuickPlay(currentRoomIndex + 1);
+                } else {
+                    alert(data.msg);
+                    resetLobby();
+                }
+            } else if (data.type === 'INIT_SYNC' || data.type === 'PLAYER_SYNC') {
+                playersMap = data.playersMap;
+                updatePlayerListUI();
+            } else if (data.type === 'START_GAME') {
+                currentGame = data.game;
+                gameState = data.state;
+                switchCanvas(data.game);
+            } else if (data.type === 'STATE_UPDATE') {
+                gameState = data.state;
+                renderGame(currentGame, gameState);
+            } else if (data.type === 'LOBBY_RETURN') {
+                returnToLobbyUI();
+            }
+        }
+
+        document.getElementById('btn-leave').addEventListener('click', () => {
+            if (isHost && currentGame) {
+                // Host ending game, return to lobby
+                stopGame();
+                broadcast({ type: 'LOBBY_RETURN' });
+                returnToLobbyUI();
+            } else {
+                // Completely leave
+                resetLobby();
             }
         });
-    }
 
-    // --- Game Logic Functions ---
-
-    function spawnTargets(count) {
-        for(let i=0; i<count; i++) {
-            const size = 3 + Math.random() * 2;
-            const id = Math.random().toString(36).substr(2, 9);
-            
-            // Physics
-            const shape = new CANNON.Box(new CANNON.Vec3(size/2, size/2, size/2));
-            const body = new CANNON.Body({ mass: STATE.isFPS ? 0 : size }); 
-            body.addShape(shape);
-            
-            if (STATE.isFPS) {
-                // Static targets deep down the range (-Z axis)
-                body.position.set((Math.random() - 0.5) * 60, 2 + Math.random() * 20, -30 - Math.random() * 80); 
-            } else {
-                // Falling boxes for AR mode
-                body.position.set((Math.random() - 0.5) * 20, 40, (Math.random() - 0.5) * 5); 
-            }
-            
-            body.userData = { isBox: true, id: id };
-            
-            // Listen for bullets hitting the box
-            body.addEventListener("collide", (e) => {
-                if(e.body.userData && e.body.userData.isBullet) {
-                    breakBox(id);
-                }
-            });
-            
-            world.addBody(body);
-
-            // Graphics
-            const geo = new THREE.BoxGeometry(size, size, size);
-            const mat = new THREE.MeshStandardMaterial({ 
-                color: STATE.isFPS ? 0xe53e3e : 0xf59e0b, // Red targets in FPS, Amber boxes in AR
-                roughness: 0.8
-            });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.castShadow = true; mesh.receiveShadow = true;
-            scene.add(mesh);
-
-            // Wireframe overlay
-            const edges = new THREE.EdgesGeometry(geo);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x78350f }));
-            mesh.add(line);
-
-            boxes.push({ id, body, mesh, size });
+        // --- ROOM MANAGEMENT ---
+        function addPlayer(id) {
+            const currentCount = Object.keys(playersMap).length;
+            playersMap[id] = currentCount; // Assign index 0-3
+            playerInputs[currentCount] = { up: false, down: false, left: false, right: false, action: false };
+            updatePlayerListUI();
         }
-    }
 
-    function createExplosion(x,y,z, colorHex) {
-        for(let i=0; i<15; i++) {
-            const geo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-            const mat = new THREE.MeshBasicMaterial({color: colorHex});
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(x + (Math.random()-0.5)*2, y + (Math.random()-0.5)*2, z + (Math.random()-0.5)*2);
-            scene.add(mesh);
-            
-            particles.push({
-                mesh: mesh,
-                vx: (Math.random()-0.5)*0.5, vy: Math.random()*0.5, vz: (Math.random()-0.5)*0.5,
-                life: 1.0
+        function removePlayer(id) {
+            delete playersMap[id];
+            // Re-index remaining players to ensure contiguous 0-N
+            let i = 0;
+            const newMap = {};
+            const newInputs = {};
+            for (let peerId in playersMap) {
+                newMap[peerId] = i;
+                newInputs[i] = { up: false, down: false, left: false, right: false, action: false };
+                i++;
+            }
+            playersMap = newMap;
+            playerInputs = newInputs;
+            updatePlayerListUI();
+        }
+
+        function broadcastPlayers() {
+            broadcast({ type: 'PLAYER_SYNC', playersMap: playersMap });
+            updatePlayerListUI();
+        }
+
+        function broadcast(msg) {
+            if (!isHost) return;
+            Object.values(clients).forEach(conn => {
+                if (conn.open) conn.send(msg);
             });
         }
-    }
 
-    function breakBox(id) {
-        const index = boxes.findIndex(b => b.id === id);
-        if (index > -1) {
-            const box = boxes[index];
-            createExplosion(box.body.position.x, box.body.position.y, box.body.position.z, STATE.isFPS ? 0xe53e3e : 0xf59e0b);
+        function updatePlayerListUI() {
+            ui.playerList.innerHTML = '';
+            const count = Object.keys(playersMap).length;
+            ui.playerCount.innerText = count;
             
-            world.removeBody(box.body);
-            scene.remove(box.mesh);
-            boxes.splice(index, 1);
+            // Sort by index to maintain order
+            const sortedIds = Object.keys(playersMap).sort((a,b) => playersMap[a] - playersMap[b]);
             
-            STATE.score += 50;
-            scoreVal.innerText = STATE.score;
-            scoreVal.parentElement.classList.add('scale-125', 'text-yellow-300');
-            setTimeout(() => scoreVal.parentElement.classList.remove('scale-125', 'text-yellow-300'), 150);
-            
-            // Spawn more targets in FPS mode if we run low
-            if (STATE.isFPS && boxes.length < 5) {
-                spawnTargets(10);
-            }
+            sortedIds.forEach(id => {
+                const idx = playersMap[id];
+                const badge = document.createElement('div');
+                badge.className = `px-4 py-2 rounded-full font-bold text-white shadow-md flex items-center gap-2`;
+                badge.style.backgroundColor = COLORS[idx];
+                badge.innerHTML = `P${idx + 1} ${id === myId ? '(You)' : ''} ${id === Object.keys(playersMap).find(key => playersMap[key]===0) ? '👑' : ''}`;
+                ui.playerList.appendChild(badge);
+            });
         }
-    }
 
-    function shootBullet() {
-        // Calculate tip position for spawning bullet
-        const tipLocal = new CANNON.Vec3(0, 1.5, 3.5);
-        const tipWorld = pistolBody.pointToWorldFrame(tipLocal);
-        
-        // Calculate forward velocity based on gun angle (Z axis is forward in our setup)
-        const forwardLocal = new CANNON.Vec3(0, 0, 150);
-        const velWorld = pistolBody.vectorToWorldFrame(forwardLocal);
-        
-        const shape = new CANNON.Sphere(0.4);
-        const body = new CANNON.Body({ mass: 0.5 }); 
-        body.addShape(shape);
-        body.position.copy(tipWorld);
-        body.velocity.copy(velWorld);
-        body.userData = { isBullet: true };
-        world.addBody(body);
-        
-        const mesh = new THREE.Mesh(
-            new THREE.SphereGeometry(0.4), 
-            new THREE.MeshBasicMaterial({color: 0x0ea5e9})
-        );
-        scene.add(mesh);
-        
-        bullets.push({ body, mesh, life: 2.0 });
-        
-        // Visual flash
-        if(window.spotLight) {
-            window.spotLight.color.setHex(0xffffff);
-            window.spotLight.intensity = 5.0;
-            setTimeout(() => { 
-                window.spotLight.color.setHex(0x06b6d4); 
-                window.spotLight.intensity = 2.0; 
-            }, 50);
+        function resetLobby() {
+            if (peer) { peer.destroy(); peer = null; }
+            myId = null; isHost = false; hostConn = null; clients = {}; playersMap = {}; playerInputs = {};
+            stopGame();
+            ui.screenGame.classList.add('hidden');
+            ui.screenLobby.classList.remove('hidden');
+            ui.panelRoom.classList.add('hidden');
+            ui.panelConnect.classList.remove('hidden');
+            ui.btnLeave.classList.add('hidden');
+            ui.status.innerText = "Status: Disconnected";
+            
+            // Reset the quick play button
+            ui.btnQuickPlay.disabled = false;
+            ui.btnQuickPlay.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Find Game
+            `;
         }
-    }
 
-    // --- Main Render & Physics Loop ---
-    function renderLoop(time) {
-        requestAnimationFrame(renderLoop);
-        
-        const dt = (time - lastTime) / 1000 || 0.016;
-        lastTime = time;
+        function returnToLobbyUI() {
+            ui.screenGame.classList.add('hidden');
+            ui.screenLobby.classList.remove('hidden');
+            ui.btnLeave.innerText = "Leave Room";
+            currentGame = null;
+            // Clear all canvases
+            Object.values(ui.canvases).forEach(canvas => {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+            });
+        }
 
-        // 1. Step Physics
-        world.step(1/60, dt, 3);
+        function switchCanvas(gameName) {
+            Object.values(ui.canvases).forEach(c => c.classList.remove('active'));
+            ui.canvases[gameName].classList.add('active');
+            ui.screenLobby.classList.add('hidden');
+            ui.screenGame.classList.remove('hidden');
+            ui.btnLeave.innerText = "End Game";
+        }
 
-        // 2. Update Kinematic Player Bodies from AI
-        if (POSE3D.visible) {
+        // --- HOST GAME ENGINE ---
+        function startGame(gameName) {
+            if (!isHost) return;
+            currentGame = gameName;
+            gameState = Games[gameName].init();
             
-            // Smoothly move physics bodies towards target (Kinematic velocity approach)
-            const approach = (body, target) => {
-                const dx = target.x - body.position.x;
-                const dy = target.y - body.position.y;
-                const dz = target.z - body.position.z;
-                body.velocity.set(dx * 10, dy * 10, dz * 10);
-            };
+            broadcast({ type: 'START_GAME', game: gameName, state: gameState });
+            switchCanvas(gameName);
             
-            approach(handLeftBody, POSE3D.left);
-            approach(handRightBody, POSE3D.right);
-            approach(headBody, POSE3D.head);
+            if (hostLoopInterval) clearInterval(hostLoopInterval);
+            hostLoopInterval = setInterval(hostLoop, 1000 / FPS);
+        }
 
-            // Update All Bones Graphics
-            const updateBone = (mesh, p1, p2) => {
-                if(!p1 || !p2) return;
-                const distance = p1.distanceTo(p2);
-                
-                // For Groups (our exoskeleton meshes), we need to scale the cylinder inside
-                mesh.children[0].scale.set(1, distance, 1);
-                
-                mesh.position.copy(p1).lerp(p2, 0.5);
-                mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p2.clone().sub(p1).normalize());
-            };
+        function stopGame() {
+            if (hostLoopInterval) clearInterval(hostLoopInterval);
+            hostLoopInterval = null;
+        }
+
+        function hostLoop() {
+            if (!currentGame) return;
+            Games[currentGame].update(gameState, playerInputs);
+            broadcast({ type: 'STATE_UPDATE', state: gameState });
+            renderGame(currentGame, gameState); // Render locally for host
+        }
+
+        // --- RENDER ENGINE ---
+        function renderGame(gameName, state) {
+            const canvas = ui.canvases[gameName];
+            const ctx = canvas.getContext('2d');
             
-            // Arms
-            updateBone(bodyBones.leftUpper, POSE3D.leftShoulder, POSE3D.leftElbow);
-            updateBone(bodyBones.leftLower, POSE3D.leftElbow, POSE3D.left);
-            updateBone(bodyBones.rightUpper, POSE3D.rightShoulder, POSE3D.rightElbow);
-            updateBone(bodyBones.rightLower, POSE3D.rightElbow, POSE3D.right);
+            // Render specific game
+            Games[gameName].render(ctx, state);
             
-            // Torso (Square connecting shoulders and hips)
-            updateBone(bodyBones.torsoTop, POSE3D.leftShoulder, POSE3D.rightShoulder);
-            updateBone(bodyBones.torsoBottom, POSE3D.leftHip, POSE3D.rightHip);
-            updateBone(bodyBones.torsoLeft, POSE3D.leftShoulder, POSE3D.leftHip);
-            updateBone(bodyBones.torsoRight, POSE3D.rightShoulder, POSE3D.rightHip);
-
-            // Legs
-            updateBone(bodyBones.leftUpperLeg, POSE3D.leftHip, POSE3D.leftKnee);
-            updateBone(bodyBones.leftLowerLeg, POSE3D.leftKnee, POSE3D.leftAnkle);
-            updateBone(bodyBones.rightUpperLeg, POSE3D.rightHip, POSE3D.rightKnee);
-            updateBone(bodyBones.rightLowerLeg, POSE3D.rightKnee, POSE3D.rightAnkle);
-
-            // --- PISTOL AIMING LOGIC ---
-            // Pistol snaps to hand position
-            pistolBody.position.copy(handRightBody.position);
-            
-            // Calculate vector from elbow to wrist to get the direction the arm is pointing
-            const aimDir = new THREE.Vector3().subVectors(POSE3D.right, POSE3D.rightElbow).normalize();
-            
-            // Only rotate if we have a valid vector
-            if (aimDir.lengthSq() > 0.01) {
-                // The gun barrel faces +Z locally. Rotate gun so +Z matches the arm's aim vector
-                const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), aimDir);
-                pistolBody.quaternion.copy(targetQuat);
-            }
-
-            // Shooting Logic (Finger curl)
-            if (STATE.isGrabbing) {
-                let isShooting = (STATE.activeHand === 'right' && POSE3D.rightShoot) || 
-                                 (STATE.activeHand === 'left' && POSE3D.leftShoot);
-
-                // Glow hands red when shooting
-                handLeftMesh.material.emissive.setHex(POSE3D.leftShoot ? 0xef4444 : 0x1e293b);
-                handRightMesh.material.emissive.setHex(POSE3D.rightShoot ? 0xef4444 : 0x1e293b);
-
-                // Auto-shoot if pulling the trigger (fires every 250ms)
-                if (isShooting && time - lastShootTime > 250) {
-                    shootBullet();
-                    lastShootTime = time;
+            // Update UI scores if applicable
+            let uiHtml = '';
+            const pCount = Object.keys(playersMap).length;
+            for(let i=0; i<pCount; i++) {
+                if (state.scores && state.scores[i] !== undefined) {
+                    uiHtml += `<span style="color:${COLORS[i]}">P${i+1}: ${state.scores[i]}</span>`;
                 }
             }
-        } else {
-            // Stop hands if AI loses tracking
-            handLeftBody.velocity.set(0,0,0); handRightBody.velocity.set(0,0,0); headBody.velocity.set(0,0,0);
-            pistolBody.velocity.set(0,0,0);
+            ui.gameUi.innerHTML = uiHtml;
         }
 
-        // --- CAMERA VIEW ---
-        if (STATE.isFPS) {
-            // Attach camera inside the helmet!
-            camera.position.copy(headMesh.position);
-            camera.position.y += 1.5; // Eye level
-            camera.position.z -= 2.0; // Push forward to not clip helmet
-            // Look straight ahead down the range
-            camera.lookAt(camera.position.x, camera.position.y, -100);
-            
-            // Hide own head to prevent clipping
-            headMesh.visible = false;
-        } else {
-            // AR Mirror View
-            camera.position.set(0, 20, 45);
-            camera.lookAt(0, 15, 0);
-            headMesh.visible = true;
-        }
+        // Helper Drawing Functions
+        function drawRect(ctx, x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
+        function drawCircle(ctx, x, y, r, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
 
-        // 3. Sync Graphics with Physics
-        handLeftMesh.position.copy(handLeftBody.position);
-        handRightMesh.position.copy(handRightBody.position);
-        headMesh.position.copy(headBody.position);
-        
-        pistolMesh.position.copy(pistolBody.position);
-        pistolMesh.quaternion.copy(pistolBody.quaternion);
+        // --- THE 5 GAMES IMPLEMENTATIONS ---
 
-        // Update Boxes & Cleanup fallen ones
-        for (let i = boxes.length - 1; i >= 0; i--) {
-            const b = boxes[i];
-            b.mesh.position.copy(b.body.position);
-            b.mesh.quaternion.copy(b.body.quaternion);
-            
-            if (b.body.position.y < -5) {
-                world.removeBody(b.body);
-                scene.remove(b.mesh);
-                boxes.splice(i, 1);
+        const Games = {
+            // 1. TRON (Lightcycles) - Array grid based collision
+            tron: {
+                init: function() {
+                    const count = Object.keys(playersMap).length;
+                    const state = { 
+                        players: [], 
+                        grid: new Array(CANVAS_W/10).fill(0).map(()=>new Array(CANVAS_H/10).fill(-1)),
+                        scores: new Array(count).fill(0),
+                        winner: -1
+                    };
+                    const startPos = [
+                        {x: 10, y: 30, dir: 1}, {x: 70, y: 30, dir: 3},
+                        {x: 40, y: 10, dir: 2}, {x: 40, y: 50, dir: 0}
+                    ];
+                    for(let i=0; i<count; i++) {
+                        state.players.push({
+                            x: startPos[i].x, y: startPos[i].y, dir: startPos[i].dir,
+                            alive: true, color: COLORS[i], id: i
+                        });
+                        state.grid[startPos[i].x][startPos[i].y] = i;
+                    }
+                    return state;
+                },
+                update: function(state, inputs) {
+                    if (state.winner !== -1) return; // Game over
+                    
+                    let aliveCount = 0;
+                    let lastAlive = -1;
+
+                    state.players.forEach(p => {
+                        if (!p.alive) return;
+                        aliveCount++;
+                        lastAlive = p.id;
+                        
+                        const inp = inputs[p.id];
+                        // Prevent 180 degree turns
+                        if (inp.up && p.dir !== 2) p.dir = 0;
+                        else if (inp.right && p.dir !== 3) p.dir = 1;
+                        else if (inp.down && p.dir !== 0) p.dir = 2;
+                        else if (inp.left && p.dir !== 1) p.dir = 3;
+
+                        if (p.dir === 0) p.y -= 1;
+                        if (p.dir === 1) p.x += 1;
+                        if (p.dir === 2) p.y += 1;
+                        if (p.dir === 3) p.x -= 1;
+
+                        // Check collision
+                        if (p.x < 0 || p.x >= CANVAS_W/10 || p.y < 0 || p.y >= CANVAS_H/10 || state.grid[p.x][p.y] !== -1) {
+                            p.alive = false;
+                        } else {
+                            state.grid[p.x][p.y] = p.id; // Leave trail
+                        }
+                    });
+
+                    if (aliveCount <= 1 && state.players.length > 1) {
+                        state.winner = lastAlive;
+                        if(lastAlive !== -1) state.scores[lastAlive]++;
+                    }
+                },
+                render: function(ctx, state) {
+                    // For Tron, we don't clear the full screen every frame, we draw the whole grid to ensure trails remain visible even for late syncs
+                    ctx.fillStyle = '#1e293b';
+                    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+                    
+                    for(let x=0; x<CANVAS_W/10; x++) {
+                        for(let y=0; y<CANVAS_H/10; y++) {
+                            if (state.grid[x][y] !== -1) {
+                                drawRect(ctx, x*10, y*10, 10, 10, COLORS[state.grid[x][y]]);
+                            }
+                        }
+                    }
+
+                    // Highlight heads
+                    state.players.forEach(p => {
+                        if (p.alive) {
+                            drawRect(ctx, p.x*10, p.y*10, 10, 10, '#ffffff');
+                        }
+                    });
+
+                    if (state.winner !== -1) {
+                        ctx.fillStyle = "rgba(0,0,0,0.7)";
+                        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+                        ctx.fillStyle = COLORS[state.winner] || '#fff';
+                        ctx.font = "40px sans-serif";
+                        ctx.textAlign = "center";
+                        ctx.fillText(state.winner !== -1 ? `Player ${state.winner+1} Wins!` : "Draw!", CANVAS_W/2, CANVAS_H/2);
+                    }
+                }
+            },
+
+            // 2. COIN DASH - Top down collector
+            dash: {
+                init: function() {
+                    const count = Object.keys(playersMap).length;
+                    return {
+                        players: Array.from({length: count}, (_, i) => ({
+                            id: i, x: 100 + i*150, y: 100, score: 0
+                        })),
+                        coin: { x: 400, y: 300 },
+                        scores: new Array(count).fill(0)
+                    };
+                },
+                update: function(state, inputs) {
+                    const speed = 7;
+                    state.players.forEach(p => {
+                        const inp = inputs[p.id];
+                        if (inp.up) p.y -= speed;
+                        if (inp.down) p.y += speed;
+                        if (inp.left) p.x -= speed;
+                        if (inp.right) p.x += speed;
+
+                        // Bounds
+                        p.x = Math.max(15, Math.min(CANVAS_W - 15, p.x));
+                        p.y = Math.max(15, Math.min(CANVAS_H - 15, p.y));
+
+                        // Coin collision
+                        const dx = p.x - state.coin.x;
+                        const dy = p.y - state.coin.y;
+                        if (Math.sqrt(dx*dx + dy*dy) < 25) {
+                            state.scores[p.id]++;
+                            state.coin.x = 50 + Math.random() * (CANVAS_W - 100);
+                            state.coin.y = 50 + Math.random() * (CANVAS_H - 100);
+                        }
+                    });
+                },
+                render: function(ctx, state) {
+                    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+                    
+                    // Draw Coin (Gold with pulse)
+                    const pulse = 15 + Math.sin(Date.now() / 150) * 3;
+                    drawCircle(ctx, state.coin.x, state.coin.y, pulse, '#fbbf24');
+                    drawCircle(ctx, state.coin.x, state.coin.y, pulse-4, '#f59e0b');
+
+                    // Draw Players
+                    state.players.forEach(p => {
+                        drawRect(ctx, p.x - 15, p.y - 15, 30, 30, COLORS[p.id]);
+                        // Draw face
+                        ctx.fillStyle = '#fff';
+                        ctx.fillRect(p.x - 8, p.y - 8, 5, 5);
+                        ctx.fillRect(p.x + 3, p.y - 8, 5, 5);
+                    });
+                }
+            },
+
+            // 3. SUMO SMASH - Physics bump
+            sumo: {
+                init: function() {
+                    const count = Object.keys(playersMap).length;
+                    return {
+                        players: Array.from({length: count}, (_, i) => {
+                            const angle = (i / count) * Math.PI * 2;
+                            return { id: i, x: 400 + Math.cos(angle)*100, y: 300 + Math.sin(angle)*100, vx: 0, vy: 0, alive: true }
+                        }),
+                        arenaRadius: 250,
+                        scores: new Array(count).fill(0)
+                    };
+                },
+                update: function(state, inputs) {
+                    const accel = 0.8;
+                    const friction = 0.94;
+                    const playerRadius = 20;
+
+                    state.players.forEach(p => {
+                        if (!p.alive) return;
+                        const inp = inputs[p.id];
+                        if (inp.up) p.vy -= accel;
+                        if (inp.down) p.vy += accel;
+                        if (inp.left) p.vx -= accel;
+                        if (inp.right) p.vx += accel;
+
+                        p.vx *= friction;
+                        p.vy *= friction;
+                        p.x += p.vx;
+                        p.y += p.vy;
+
+                        // Ringout check
+                        const distFromCenter = Math.sqrt(Math.pow(p.x - CANVAS_W/2, 2) + Math.pow(p.y - CANVAS_H/2, 2));
+                        if (distFromCenter > state.arenaRadius) {
+                            p.alive = false;
+                        }
+                    });
+
+                    // Collisions
+                    for (let i = 0; i < state.players.length; i++) {
+                        for (let j = i + 1; j < state.players.length; j++) {
+                            const p1 = state.players[i], p2 = state.players[j];
+                            if (!p1.alive || !p2.alive) continue;
+                            const dx = p2.x - p1.x, dy = p2.y - p1.y;
+                            const dist = Math.sqrt(dx*dx + dy*dy);
+                            
+                            if (dist < playerRadius * 2) {
+                                // Overlap resolution
+                                const nx = dx / dist, ny = dy / dist;
+                                const overlap = (playerRadius * 2 - dist) / 2;
+                                p1.x -= nx * overlap; p1.y -= ny * overlap;
+                                p2.x += nx * overlap; p2.y += ny * overlap;
+                                
+                                // Momentum exchange
+                                const tx = p1.vx, ty = p1.vy;
+                                p1.vx = p2.vx; p1.vy = p2.vy;
+                                p2.vx = tx; p2.vy = ty;
+                                // Add extra bump
+                                p1.vx -= nx * 3; p1.vy -= ny * 3;
+                                p2.vx += nx * 3; p2.vy += ny * 3;
+                            }
+                        }
+                    }
+
+                    // Score logic
+                    const alivePlayers = state.players.filter(p => p.alive);
+                    if (alivePlayers.length === 1 && state.players.length > 1) {
+                        state.scores[alivePlayers[0].id]++;
+                        // Reset round after short delay by re-initing but keeping scores
+                        state.players.forEach((p, i) => {
+                            const angle = (i / state.players.length) * Math.PI * 2;
+                            p.x = 400 + Math.cos(angle)*100; p.y = 300 + Math.sin(angle)*100;
+                            p.vx = 0; p.vy = 0; p.alive = true;
+                        });
+                    }
+                },
+                render: function(ctx, state) {
+                    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+                    
+                    // Arena
+                    drawCircle(ctx, CANVAS_W/2, CANVAS_H/2, state.arenaRadius, '#334155');
+                    drawCircle(ctx, CANVAS_W/2, CANVAS_H/2, state.arenaRadius - 5, '#1e293b');
+                    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.arc(CANVAS_W/2, CANVAS_H/2, state.arenaRadius, 0, Math.PI*2); ctx.stroke();
+
+                    // Players
+                    state.players.forEach(p => {
+                        if (!p.alive) return;
+                        drawCircle(ctx, p.x, p.y, 20, COLORS[p.id]);
+                        drawCircle(ctx, p.x, p.y, 14, 'rgba(0,0,0,0.3)');
+                    });
+                }
+            },
+
+            // 4. BLASTER - Arena Shooter
+            shooter: {
+                init: function() {
+                    const count = Object.keys(playersMap).length;
+                    return {
+                        players: Array.from({length: count}, (_, i) => ({
+                            id: i, x: 100 + (i%2)*600, y: 100 + Math.floor(i/2)*400, 
+                            dirX: 1, dirY: 0, cooldown: 0, hp: 5
+                        })),
+                        bullets: [],
+                        scores: new Array(count).fill(0)
+                    };
+                },
+                update: function(state, inputs) {
+                    const speed = 5;
+                    const pRadius = 15;
+                    const bSpeed = 12;
+
+                    state.players.forEach(p => {
+                        if (p.hp <= 0) {
+                            // Respawn logic
+                            p.x = 50 + Math.random()*700; p.y = 50 + Math.random()*500; p.hp = 5;
+                        }
+
+                        const inp = inputs[p.id];
+                        let movedX = 0, movedY = 0;
+
+                        if (inp.up) movedY = -1;
+                        if (inp.down) movedY = 1;
+                        if (inp.left) movedX = -1;
+                        if (inp.right) movedX = 1;
+
+                        if (movedX !== 0 || movedY !== 0) {
+                            p.dirX = movedX; p.dirY = movedY;
+                            // Normalize direction
+                            const mag = Math.sqrt(p.dirX*p.dirX + p.dirY*p.dirY);
+                            p.dirX /= mag; p.dirY /= mag;
+                        }
+
+                        p.x += movedX * speed;
+                        p.y += movedY * speed;
+                        p.x = Math.max(pRadius, Math.min(CANVAS_W - pRadius, p.x));
+                        p.y = Math.max(pRadius, Math.min(CANVAS_H - pRadius, p.y));
+
+                        if (p.cooldown > 0) p.cooldown--;
+
+                        if (inp.action && p.cooldown <= 0) {
+                            state.bullets.push({
+                                x: p.x + p.dirX*20, y: p.y + p.dirY*20,
+                                vx: p.dirX * bSpeed, vy: p.dirY * bSpeed,
+                                owner: p.id
+                            });
+                            p.cooldown = 15; // Half second cooldown at 30fps
+                        }
+                    });
+
+                    // Update bullets
+                    for (let i = state.bullets.length - 1; i >= 0; i--) {
+                        let b = state.bullets[i];
+                        b.x += b.vx; b.y += b.vy;
+                        
+                        // Bounds
+                        if (b.x < 0 || b.x > CANVAS_W || b.y < 0 || b.y > CANVAS_H) {
+                            state.bullets.splice(i, 1);
+                            continue;
+                        }
+
+                        // Player hit check
+                        let hit = false;
+                        for (let j = 0; j < state.players.length; j++) {
+                            let p = state.players[j];
+                            if (p.id !== b.owner && p.hp > 0) {
+                                const dist = Math.sqrt(Math.pow(p.x - b.x, 2) + Math.pow(p.y - b.y, 2));
+                                if (dist < pRadius + 5) {
+                                    p.hp--;
+                                    if (p.hp <= 0) state.scores[b.owner]++;
+                                    hit = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (hit) state.bullets.splice(i, 1);
+                    }
+                },
+                render: function(ctx, state) {
+                    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+                    // Grid background
+                    ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
+                    for(let i=0; i<CANVAS_W; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,CANVAS_H); ctx.stroke(); }
+                    for(let i=0; i<CANVAS_H; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(CANVAS_W,i); ctx.stroke(); }
+
+                    // Bullets
+                    state.bullets.forEach(b => {
+                        drawCircle(ctx, b.x, b.y, 5, COLORS[b.owner]);
+                    });
+
+                    // Players
+                    state.players.forEach(p => {
+                        if (p.hp <= 0) return;
+                        
+                        // Body
+                        drawCircle(ctx, p.x, p.y, 15, COLORS[p.id]);
+                        
+                        // Gun barrel
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p.x + p.dirX * 22, p.y + p.dirY * 22);
+                        ctx.stroke();
+
+                        // HP Bar
+                        drawRect(ctx, p.x - 15, p.y - 25, 30, 4, '#ef4444');
+                        drawRect(ctx, p.x - 15, p.y - 25, 30 * (p.hp/5), '#22c55e');
+                    });
+                }
+            },
+
+            // 5. CROWN TAG - Keepaway
+            tag: {
+                init: function() {
+                    const count = Object.keys(playersMap).length;
+                    return {
+                        players: Array.from({length: count}, (_, i) => ({
+                            id: i, x: 200 + i*100, y: 300, isIt: i===0
+                        })),
+                        cooldown: 0, // Transfer cooldown
+                        scores: new Array(count).fill(0)
+                    };
+                },
+                update: function(state, inputs) {
+                    const speed = 6;
+                    const itSpeed = 6.5; // Crown wearer moves slightly faster
+
+                    if (state.cooldown > 0) state.cooldown--;
+
+                    let currentIt = state.players.find(p => p.isIt);
+                    if(currentIt) {
+                        // Crown wearer gains points slowly
+                        state.scores[currentIt.id] += 1;
+                    }
+
+                    state.players.forEach(p => {
+                        const s = p.isIt ? itSpeed : speed;
+                        const inp = inputs[p.id];
+                        if (inp.up) p.y -= s;
+                        if (inp.down) p.y += s;
+                        if (inp.left) p.x -= s;
+                        if (inp.right) p.x += s;
+
+                        p.x = Math.max(15, Math.min(CANVAS_W - 15, p.x));
+                        p.y = Math.max(15, Math.min(CANVAS_H - 15, p.y));
+                    });
+
+                    // Tag Collisions
+                    if (state.cooldown <= 0 && currentIt) {
+                        for (let p of state.players) {
+                            if (p.id !== currentIt.id) {
+                                const dist = Math.sqrt(Math.pow(p.x - currentIt.x, 2) + Math.pow(p.y - currentIt.y, 2));
+                                if (dist < 30) {
+                                    // Steal crown
+                                    currentIt.isIt = false;
+                                    p.isIt = true;
+                                    state.cooldown = 60; // 2 seconds safety
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                },
+                render: function(ctx, state) {
+                    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+                    // Divide points by 30 (fps) for display logic, but actual scores track frames
+                    state.players.forEach(p => {
+                        // Draw aura if IT and safe
+                        if (p.isIt) {
+                            ctx.fillStyle = state.cooldown > 0 ? 'rgba(255,255,255,0.4)' : 'rgba(234, 179, 8, 0.4)';
+                            ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, Math.PI*2); ctx.fill();
+                        }
+                        
+                        drawCircle(ctx, p.x, p.y, 15, COLORS[p.id]);
+
+                        if (p.isIt) {
+                            // Draw Crown
+                            ctx.fillStyle = '#fbbf24';
+                            ctx.beginPath();
+                            ctx.moveTo(p.x - 10, p.y - 15);
+                            ctx.lineTo(p.x - 15, p.y - 25);
+                            ctx.lineTo(p.x - 5, p.y - 20);
+                            ctx.lineTo(p.x, p.y - 30);
+                            ctx.lineTo(p.x + 5, p.y - 20);
+                            ctx.lineTo(p.x + 15, p.y - 25);
+                            ctx.lineTo(p.x + 10, p.y - 15);
+                            ctx.closePath();
+                            ctx.fill();
+                        }
+                    });
+
+                    // Render custom score conversion (points / 30 for seconds)
+                    let uiHtml = '';
+                    for(let i=0; i<state.scores.length; i++) {
+                        uiHtml += `<span style="color:${COLORS[i]}">P${i+1}: ${Math.floor(state.scores[i]/30)}s</span>`;
+                    }
+                    ui.gameUi.innerHTML = uiHtml;
+                }
             }
-        }
-
-        // Update Bullets
-        for (let i = bullets.length - 1; i >= 0; i--) {
-            const b = bullets[i];
-            b.mesh.position.copy(b.body.position);
-            b.mesh.quaternion.copy(b.body.quaternion);
-            b.life -= dt;
-            if(b.life <= 0) {
-                world.removeBody(b.body);
-                scene.remove(b.mesh);
-                bullets.splice(i, 1);
-            }
-        }
-
-        // Update Particles
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i];
-            p.mesh.position.x += p.vx;
-            p.mesh.position.y += p.vy;
-            p.mesh.position.z += p.vz;
-            p.vy -= 0.02; // gravity
-            p.life -= 0.03;
-            
-            // scale down
-            p.mesh.scale.setScalar(p.life);
-
-            if (p.life <= 0) {
-                scene.remove(p.mesh);
-                particles.splice(i, 1);
-            }
-        }
-
-        // 4. Render 3D Scene
-        renderer.render(scene, camera);
-    }
-</script>
+        };
+    </script>
 </body>
 </html>
