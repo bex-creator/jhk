@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Geometry Dash - Ship Mode</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Geometry Dash - Ship Mode (Fullscreen)</title>
     <style>
         body {
             margin: 0;
@@ -11,52 +11,70 @@
             background-color: #0a0a10;
             color: white;
             font-family: 'Impact', 'Arial Black', sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+            overflow: hidden; /* Prevents scrollbars */
+            width: 100vw;
             height: 100vh;
-            overflow: hidden;
-            letter-spacing: 1px;
         }
         canvas {
+            display: block;
             background-color: #0d1117;
-            border: 4px solid #00c6ff;
-            box-shadow: 0 0 30px rgba(0, 198, 255, 0.3);
             cursor: pointer;
+            touch-action: none; /* Prevents mobile swipe-to-refresh */
+        }
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            pointer-events: none; /* Lets clicks pass through to the canvas */
+            transition: opacity 0.5s ease;
         }
         #instructions {
-            margin-top: 15px;
-            text-align: center;
             font-family: Arial, sans-serif;
             color: #8a99ad;
-            font-size: 14px;
+            font-size: 16px;
+            letter-spacing: 1px;
+            margin-top: 10px;
         }
         strong { color: #00c6ff; }
     </style>
 </head>
 <body>
 
-    <canvas id="gameCanvas" width="800" height="450"></canvas>
-    <div id="instructions">
-        <p><strong>HOLD SPACEBAR, CLICK, OR TAP</strong> to fly up. Release to fall.</p>
+    <div id="ui-layer">
+        <div id="instructions">
+            <p><strong>HOLD SPACEBAR, CLICK, OR TAP</strong> to fly up. Release to fall.</p>
+        </div>
     </div>
+    <canvas id="gameCanvas"></canvas>
 
 <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
+    const uiLayer = document.getElementById("ui-layer");
+
+    // Dynamic Sizing
+    let groundHeight = 60;
+    
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        // Keep ground proportional on very small screens, but max 60px
+        groundHeight = Math.min(60, canvas.height * 0.15); 
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); // Set initial size
 
     // Game Control Variables
     let frames = 0;
     let score = 0;
     let gameOver = false;
     let isFlying = false;
-    let gameSpeed = 5;
+    let hasStarted = false;
+    let gameSpeed = 6;
     let bgScroll = 0;
 
-    const groundHeight = 50;
-
-    // Particle System for Ship Trail and Explosions
+    // Particle System
     let particles = [];
     function createParticle(x, y, color, size, speedX, speedY, life) {
         particles.push({ x, y, color, size, speedX, speedY, life, maxLife: life });
@@ -64,14 +82,14 @@
 
     // Rocket (Ship) Object
     const ship = {
-        x: 120,
-        y: 200,
+        x: Math.min(250, canvas.width * 0.2), // Position 20% in, max 250px
+        y: canvas.height / 2,
         width: 45,
         height: 26,
         velocity: 0,
         gravity: 0.35,      
         thrust: 0.6,       
-        maxVelocity: 6.5,     
+        maxVelocity: 7.5,     
         rotation: 0,
         
         draw: function() {
@@ -79,12 +97,11 @@
             ctx.translate(this.x, this.y);
             
             // Smooth rotation based on direction
-            let targetRotation = (this.velocity * 4) * (Math.PI / 180);
+            let targetRotation = (this.velocity * 3.5) * (Math.PI / 180);
             this.rotation += (targetRotation - this.rotation) * 0.2;
             ctx.rotate(this.rotation);
 
             // --- Draw GD Stylized Ship ---
-            // Main Wing / Chassis (Neon Green & Yellow)
             ctx.shadowBlur = 10;
             ctx.shadowColor = "#00ff66";
             
@@ -112,7 +129,7 @@
             ctx.closePath();
             ctx.fill();
 
-            // Ship Glass / Window (Classic Square Eye)
+            // Ship Glass / Window
             ctx.fillStyle = "#00ffff";
             ctx.shadowColor = "#00ffff";
             ctx.fillRect(5, -6, 10, 10);
@@ -121,7 +138,7 @@
             ctx.strokeRect(5, -6, 10, 10);
 
             ctx.restore();
-            ctx.shadowBlur = 0; // Reset shadow
+            ctx.shadowBlur = 0;
         },
         
         update: function() {
@@ -138,7 +155,7 @@
 
             // Engine trail (Ship passive wave trail)
             if (frames % 3 === 0) {
-                createParticle(this.x - this.width/3, this.y, "rgba(0, 255, 102, 0.5)", 8, -gameSpeed*0.5, 0, 30);
+                createParticle(this.x - this.width/3, this.y, "rgba(0, 255, 102, 0.4)", 8, -gameSpeed*0.5, 0, 30);
             }
 
             if (this.velocity > this.maxVelocity) this.velocity = this.maxVelocity;
@@ -166,30 +183,36 @@
 
     class Obstacle {
         constructor() {
-            this.x = canvas.width;
-            this.width = 60;
-            this.gap = 140; // Fitting space
+            this.x = canvas.width + 50;
+            this.width = Math.max(60, canvas.width * 0.05); // Responsive width
+            this.gap = 160; // Fitting space
             
-            // Randomize position securely above ground layer
-            let availableHeight = canvas.height - groundHeight - this.gap - 60;
-            this.topHeight = Math.random() * availableHeight + 30;
+            // Calculate available space to spawn safe gaps
+            let minPillarHeight = 40;
+            let availableHeight = canvas.height - groundHeight - this.gap - (minPillarHeight * 2);
+            
+            // Fallback for extremely short screens
+            if (availableHeight < 20) {
+                availableHeight = 20;
+                this.gap = canvas.height - groundHeight - 60; 
+            }
+
+            this.topHeight = Math.random() * availableHeight + minPillarHeight;
             this.bottomY = this.topHeight + this.gap;
             this.bottomHeight = canvas.height - groundHeight - this.bottomY;
             this.passed = false;
         }
 
         drawBlock(x, y, width, height) {
-            // Draw GD block design (Dark core with glowing cyan border)
             ctx.fillStyle = "#141923";
             ctx.fillRect(x, y, width, height);
             
             ctx.strokeStyle = "#00c6ff";
             ctx.lineWidth = 3;
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = 10;
             ctx.shadowColor = "#00c6ff";
             ctx.strokeRect(x, y, width, height);
             
-            // Inside design line
             ctx.strokeStyle = "rgba(0, 198, 255, 0.3)";
             ctx.lineWidth = 1;
             ctx.strokeRect(x + 5, y + 5, width - 10, height - 10);
@@ -200,18 +223,21 @@
             ctx.fillStyle = "#202836";
             ctx.strokeStyle = "#ff0055";
             ctx.lineWidth = 2;
-            ctx.shadowBlur = 6;
+            ctx.shadowBlur = 8;
             ctx.shadowColor = "#ff0055";
             
+            let spikeWidth = this.width;
+            let spikeHeight = 35;
+
             ctx.beginPath();
             if (isUpsideDown) {
                 ctx.moveTo(x, y);
-                ctx.lineTo(x + 30, y + 35);
-                ctx.lineTo(x + 60, y);
+                ctx.lineTo(x + spikeWidth/2, y + spikeHeight);
+                ctx.lineTo(x + spikeWidth, y);
             } else {
                 ctx.moveTo(x, y);
-                ctx.lineTo(x + 30, y - 35);
-                ctx.lineTo(x + 60, y);
+                ctx.lineTo(x + spikeWidth/2, y - spikeHeight);
+                ctx.lineTo(x + spikeWidth, y);
             }
             ctx.closePath();
             ctx.fill();
@@ -220,30 +246,27 @@
         }
 
         draw() {
-            // Draw Pillars
             this.drawBlock(this.x, 0, this.width, this.topHeight);
             this.drawBlock(this.x, this.bottomY, this.width, this.bottomHeight);
-
-            // Draw Hazards (Spikes attached to pillars)
-            this.drawSpike(this.x, this.topHeight, true); // Top spike pointing down
-            this.drawSpike(this.x, this.bottomY, false); // Bottom spike pointing up
+            this.drawSpike(this.x, this.topHeight, true);
+            this.drawSpike(this.x, this.bottomY, false);
         }
 
         update() {
             this.x -= gameSpeed;
 
-            // Exact Precise bounding box collision for ship
+            // Collision Detection
             let sLeft = ship.x - ship.width/2 + 4;
             let sRight = ship.x + ship.width/2 - 4;
             let sTop = ship.y - ship.height/2 + 4;
             let sBottom = ship.y + ship.height/2 - 4;
 
-            // Check Pillar Collision
             if (sRight > this.x && sLeft < this.x + this.width) {
+                // Hit Pillar
                 if (sTop < this.topHeight || sBottom > this.bottomY) {
                     triggerExplosion();
                 }
-                // Check Spike Collision (Rough proximity check inside spike danger zones)
+                // Hit Spike (Rough proximity check inside spike danger zones)
                 if (sTop < this.topHeight + 32 || sBottom > this.bottomY - 32) {
                     triggerExplosion();
                 }
@@ -252,68 +275,66 @@
             if (this.x + this.width < ship.x && !this.passed) {
                 score++;
                 this.passed = true;
-                // Gradually speed up level like real GD
-                if (score % 5 === 0) gameSpeed += 0.5;
+                if (score % 5 === 0) gameSpeed += 0.5; // Speed up
             }
         }
     }
 
     function triggerExplosion() {
+        if(gameOver) return;
         gameOver = true;
-        // Explode ship into iconic GD square chunks
-        for (let i = 0; i < 40; i++) {
+        for (let i = 0; i < 45; i++) {
             createParticle(
                 ship.x, 
                 ship.y, 
                 i % 2 === 0 ? "#00ff66" : "#ffff00", 
                 Math.random() * 8 + 4, 
-                (Math.random() - 0.5) * 12, 
-                (Math.random() - 0.5) * 12, 
+                (Math.random() - 0.5) * 15, 
+                (Math.random() - 0.5) * 15, 
                 40
             );
         }
     }
 
-    // Background and Ground Grid Rendering
+    // Render Environment
     function drawBackground() {
-        bgScroll -= gameSpeed * 0.3;
-        if (bgScroll <= -60) bgScroll = 0;
+        bgScroll -= gameSpeed * 0.2;
+        let gridSize = 70;
+        if (bgScroll <= -gridSize) bgScroll = 0;
 
         // Grid Lines
         ctx.strokeStyle = "#161b26";
         ctx.lineWidth = 1;
-        for (let x = bgScroll; x < canvas.width; x += 60) {
+        for (let x = bgScroll; x < canvas.width; x += gridSize) {
             ctx.beginPath();
             ctx.moveTo(x, 0);
             ctx.lineTo(x, canvas.height - groundHeight);
             ctx.stroke();
         }
-        for (let y = 0; y < canvas.height - groundHeight; y += 60) {
+        for (let y = 0; y < canvas.height - groundHeight; y += gridSize) {
             ctx.beginPath();
             ctx.moveTo(0, y);
             ctx.lineTo(canvas.width, y);
             ctx.stroke();
         }
 
-        // Deep horizon glow
-        let gradient = ctx.createLinearGradient(0, canvas.height - groundHeight - 100, 0, canvas.height - groundHeight);
+        // Horizon glow
+        let gradient = ctx.createLinearGradient(0, canvas.height - groundHeight - 120, 0, canvas.height - groundHeight);
         gradient.addColorStop(0, "rgba(0, 198, 255, 0)");
-        gradient.addColorStop(1, "rgba(0, 198, 255, 0.08)");
+        gradient.addColorStop(1, "rgba(0, 198, 255, 0.1)");
         ctx.fillStyle = gradient;
-        ctx.fillRect(0, canvas.height - groundHeight - 100, canvas.width, 100);
+        ctx.fillRect(0, canvas.height - groundHeight - 120, canvas.width, 120);
     }
 
     function drawGround() {
         const gY = canvas.height - groundHeight;
         
-        // Ground Fill
         ctx.fillStyle = "#090d14";
         ctx.fillRect(0, gY, canvas.width, groundHeight);
 
-        // Neon Top Line
         ctx.strokeStyle = "#00c6ff";
-        ctx.lineWidth = 4;
-        ctx.shadowBlur = 15;
+        ctx.lineWidth = 5;
+        ctx.shadowBlur = 20;
         ctx.shadowColor = "#00c6ff";
         ctx.beginPath();
         ctx.moveTo(0, gY);
@@ -321,14 +342,13 @@
         ctx.stroke();
         ctx.shadowBlur = 0;
 
-        // Ground Grid Details
         ctx.strokeStyle = "rgba(0, 198, 255, 0.2)";
         ctx.lineWidth = 2;
-        let groundScroll = (bgScroll * 1.5) % 30;
-        for (let x = groundScroll; x < canvas.width; x += 30) {
+        let groundScroll = (bgScroll * 2) % 40;
+        for (let x = groundScroll; x < canvas.width + 40; x += 40) {
             ctx.beginPath();
             ctx.moveTo(x, gY);
-            ctx.lineTo(x - 20, canvas.height); // Angled grid lines
+            ctx.lineTo(x - 30, canvas.height); 
             ctx.stroke();
         }
     }
@@ -341,90 +361,138 @@
             p.life--;
 
             ctx.fillStyle = p.color;
-            ctx.globalAlpha = p.life / p.maxLife;
+            ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
             ctx.fillRect(p.x, p.y, p.size, p.size);
             
-            if (p.life <= 0) {
-                particles.splice(i, 1);
-            }
+            if (p.life <= 0) particles.splice(i, 1);
         }
-        ctx.globalAlpha = 1.0; // Reset transparency
+        ctx.globalAlpha = 1.0; 
     }
 
-    // Input Handlers
-    function startFlying(e) {
-        if (e.type !== 'keydown' || e.code === 'Space') {
-            if (gameOver && frames > 30) resetGame();
-            else if (!gameOver) isFlying = true;
-            if(e.code === 'Space') e.preventDefault();
+    // Input Handling
+    function handleActionStart(e) {
+        if (e.type === 'keydown' && e.code !== 'Space') return;
+        
+        // Hide instructions on first tap
+        if (!hasStarted) {
+            hasStarted = true;
+            uiLayer.style.opacity = '0';
         }
+
+        if (gameOver && frames > 30) {
+            resetGame();
+        } else if (!gameOver) {
+            isFlying = true;
+        }
+
+        // Prevent default spacebar scrolling or mobile refreshing
+        if(e.cancelable) e.preventDefault(); 
     }
 
-    function stopFlying(e) {
-        if (e.type !== 'keyup' || e.code === 'Space') {
-            isFlying = false;
-        }
+    function handleActionEnd(e) {
+        if (e.type === 'keyup' && e.code !== 'Space') return;
+        isFlying = false;
+        if(e.cancelable) e.preventDefault();
     }
 
-    window.addEventListener("keydown", startFlying);
-    window.addEventListener("keyup", stopFlying);
-    canvas.addEventListener("mousedown", startFlying);
-    canvas.addEventListener("mouseup", stopFlying);
-    canvas.addEventListener("touchstart", startFlying, {passive: false});
-    canvas.addEventListener("touchend", stopFlying);
+    // Event Listeners (Desktop + Mobile)
+    window.addEventListener("keydown", handleActionStart, {passive: false});
+    window.addEventListener("keyup", handleActionEnd, {passive: false});
+    canvas.addEventListener("mousedown", handleActionStart, {passive: false});
+    window.addEventListener("mouseup", handleActionEnd, {passive: false});
+    canvas.addEventListener("touchstart", handleActionStart, {passive: false});
+    window.addEventListener("touchend", handleActionEnd, {passive: false});
 
     function resetGame() {
-        ship.y = 200;
+        ship.y = canvas.height / 2;
         ship.velocity = 0;
         ship.rotation = 0;
         obstacles.length = 0;
         particles.length = 0;
         score = 0;
         frames = 0;
-        gameSpeed = 5;
+        gameSpeed = Math.max(5, canvas.width / 250); // Scale speed slightly by screen size
         gameOver = false;
         isFlying = false;
     }
 
-    // Main Game Loop
+    // Main Loop
     function animate() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 1. Render Background Environment
         drawBackground();
 
-        if (!gameOver) {
-            // 2. Update Dynamics
+        if (!gameOver && hasStarted) {
             ship.update();
 
-            if (frames % 100 === 0) {
+            // Spawn obstacles based on distance/speed rather than strict frames
+            // This prevents them spawning too close on wide screens
+            let spawnRate = Math.floor(110 - (gameSpeed * 2)); 
+            if (frames % Math.max(60, spawnRate) === 0) {
                 obstacles.push(new Obstacle());
             }
 
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 obstacles[i].update();
                 obstacles[i].draw();
-                if (obstacles[i].x < -100) obstacles.shift();
+                if (obstacles[i].x < -obstacles[i].width - 50) obstacles.splice(i, 1);
             }
-
             frames++;
         } else {
-            // Frozen updates for obstacles while dead, still run custom particles
-            for (let i = 0; i < obstacles.length; i++) {
-                obstacles[i].draw();
+            // Draw frozen obstacles if dead or haven't started
+            for (let i = 0; i < obstacles.length; i++) obstacles[i].draw();
+            
+            if(!hasStarted) {
+                // Bob ship up and down slightly on menu
+                ship.y = (canvas.height / 2) + Math.sin(Date.now() / 200) * 10;
+                ship.rotation = 0;
             }
         }
 
-        // 3. Render Entities & Visual Effects
         handleParticles();
         if (!gameOver) ship.draw();
         drawGround();
 
-        // 4. GD Classic UI Display
-        // Percentage/Score Bar
-        ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
-        ctx.fillRect(canvas.width/2 - 150, 15, 300, 6);
-        
-        let progress = Math.min((score * 15), 300); // Progress simulation bar
-        ctx.fillStyle = "#00c6ff";
-        ctx.fillRect(
+        // UI Draw (Progress Bar & Score)
+        if (hasStarted) {
+            let barWidth = Math.min(400, canvas.width * 0.5);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+            ctx.fillRect(canvas.width/2 - barWidth/2, 20, barWidth, 8);
+            
+            let progress = Math.min((score * (barWidth/20)), barWidth); 
+            ctx.fillStyle = "#00c6ff";
+            ctx.fillRect(canvas.width/2 - barWidth/2, 20, progress, 8);
+
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 36px 'Impact', 'Arial Black', sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(score, canvas.width / 2, 70);
+        }
+
+        if (gameOver) {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "#ff0055";
+            ctx.font = "bold min(8vw, 60px) 'Impact', sans-serif";
+            ctx.fillText("LEVEL FAILED", canvas.width / 2, canvas.height / 2 - 20);
+
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "min(4vw, 24px) Arial";
+            ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 30);
+            
+            ctx.fillStyle = "#00c6ff";
+            ctx.font = "bold min(3vw, 20px) Arial";
+            ctx.fillText("TAP OR PRESS SPACE TO RETRY", canvas.width / 2, canvas.height / 2 + 80);
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    // Initialize game speed relative to screen size on load
+    gameSpeed = Math.max(5, canvas.width / 250);
+    animate();
+</script>
+
+</body>
+</html>
