@@ -3,121 +3,159 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rocket Dash</title>
+    <title>Geometry Dash - Ship Mode</title>
     <style>
         body {
             margin: 0;
             padding: 0;
-            background-color: #1a1a1a;
+            background-color: #0a0a10;
             color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Impact', 'Arial Black', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
             overflow: hidden;
+            letter-spacing: 1px;
         }
         canvas {
-            background-color: #2c3e50;
-            border: 4px solid #ecf0f1;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #0d1117;
+            border: 4px solid #00c6ff;
+            box-shadow: 0 0 30px rgba(0, 198, 255, 0.3);
             cursor: pointer;
         }
         #instructions {
             margin-top: 15px;
             text-align: center;
+            font-family: Arial, sans-serif;
+            color: #8a99ad;
+            font-size: 14px;
         }
+        strong { color: #00c6ff; }
     </style>
 </head>
 <body>
 
-    <h2>Rocket Dash</h2>
-    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
     <div id="instructions">
-        <p><strong>Hold SPACE, CLICK, or TAP</strong> to fly up. Release to fall.</p>
-        <p>Dodge the green obstacles!</p>
+        <p><strong>HOLD SPACEBAR, CLICK, OR TAP</strong> to fly up. Release to fall.</p>
     </div>
 
 <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    // Game Variables
+    // Game Control Variables
     let frames = 0;
     let score = 0;
     let gameOver = false;
     let isFlying = false;
+    let gameSpeed = 5;
+    let bgScroll = 0;
 
-    // Rocket (Player) Object
-    const rocket = {
-        x: 100,
+    const groundHeight = 50;
+
+    // Particle System for Ship Trail and Explosions
+    let particles = [];
+    function createParticle(x, y, color, size, speedX, speedY, life) {
+        particles.push({ x, y, color, size, speedX, speedY, life, maxLife: life });
+    }
+
+    // Rocket (Ship) Object
+    const ship = {
+        x: 120,
         y: 200,
-        width: 40,
-        height: 20,
+        width: 45,
+        height: 26,
         velocity: 0,
-        gravity: 0.25,      // How fast you fall
-        thrust: 0.45,       // How fast you fly up when holding
-        maxVelocity: 6,     // Speed limit so you don't go crazy fast
+        gravity: 0.35,      
+        thrust: 0.6,       
+        maxVelocity: 6.5,     
+        rotation: 0,
         
         draw: function() {
             ctx.save();
             ctx.translate(this.x, this.y);
             
-            // Tilt the rocket based on velocity
-            let angle = this.velocity * 3 * (Math.PI / 180);
-            ctx.rotate(angle);
+            // Smooth rotation based on direction
+            let targetRotation = (this.velocity * 4) * (Math.PI / 180);
+            this.rotation += (targetRotation - this.rotation) * 0.2;
+            ctx.rotate(this.rotation);
 
-            // Draw Rocket Body
-            ctx.fillStyle = "#e74c3c"; // Red body
-            ctx.fillRect(-this.width/2, -this.height/2, this.width, this.height);
+            // --- Draw GD Stylized Ship ---
+            // Main Wing / Chassis (Neon Green & Yellow)
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#00ff66";
             
-            // Draw Window
-            ctx.fillStyle = "#3498db";
-            ctx.fillRect(0, -this.height/4, 10, 10);
+            // Rocket Back Thruster
+            ctx.fillStyle = "#333";
+            ctx.fillRect(-this.width/2 - 4, -5, 6, 10);
 
-            // Draw Rocket Nose (Triangle)
-            ctx.fillStyle = "#f1c40f"; // Yellow nose
+            // Main Body
+            ctx.fillStyle = "#00ff66"; // Primary: Neon Green
             ctx.beginPath();
-            ctx.moveTo(this.width/2, -this.height/2);
-            ctx.lineTo(this.width/2 + 15, 0);
-            ctx.lineTo(this.width/2, this.height/2);
+            ctx.moveTo(-this.width/2, -this.height/4);
+            ctx.lineTo(this.width/3, -this.height/2);
+            ctx.lineTo(this.width/2, 0);
+            ctx.lineTo(this.width/3, this.height/2);
+            ctx.lineTo(-this.width/2, this.height/4);
+            ctx.closePath();
             ctx.fill();
 
-            // Draw Thruster Fire if flying
-            if (isFlying) {
-                ctx.fillStyle = "#e67e22";
-                ctx.beginPath();
-                ctx.moveTo(-this.width/2, -this.height/2 + 2);
-                ctx.lineTo(-this.width/2 - Math.random() * 20 - 10, 0);
-                ctx.lineTo(-this.width/2, this.height/2 - 2);
-                ctx.fill();
-            }
+            // Decorative Trim
+            ctx.fillStyle = "#ffff00"; // Secondary: Neon Yellow
+            ctx.beginPath();
+            ctx.moveTo(-this.width/4, -this.height/6);
+            ctx.lineTo(this.width/4, -this.height/6);
+            ctx.lineTo(0, this.height/3);
+            ctx.closePath();
+            ctx.fill();
+
+            // Ship Glass / Window (Classic Square Eye)
+            ctx.fillStyle = "#00ffff";
+            ctx.shadowColor = "#00ffff";
+            ctx.fillRect(5, -6, 10, 10);
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(5, -6, 10, 10);
 
             ctx.restore();
+            ctx.shadowBlur = 0; // Reset shadow
         },
         
         update: function() {
-            // Apply thrust or gravity
             if (isFlying) {
                 this.velocity -= this.thrust;
+                // Emit thrust particles
+                if (frames % 2 === 0) {
+                    createParticle(this.x - this.width/2, this.y, "#ff3300", Math.random()*6+4, -gameSpeed - (Math.random()*3), (Math.random()-0.5)*4, 20);
+                    createParticle(this.x - this.width/2, this.y, "#ffcc00", Math.random()*4+2, -gameSpeed - (Math.random()*2), (Math.random()-0.5)*2, 15);
+                }
             } else {
                 this.velocity += this.gravity;
             }
 
-            // Cap the velocity
+            // Engine trail (Ship passive wave trail)
+            if (frames % 3 === 0) {
+                createParticle(this.x - this.width/3, this.y, "rgba(0, 255, 102, 0.5)", 8, -gameSpeed*0.5, 0, 30);
+            }
+
             if (this.velocity > this.maxVelocity) this.velocity = this.maxVelocity;
             if (this.velocity < -this.maxVelocity) this.velocity = -this.maxVelocity;
 
             this.y += this.velocity;
 
-            // Floor and Ceiling Collision (acts as a solid boundary)
-            if (this.y + this.height/2 >= canvas.height) {
-                this.y = canvas.height - this.height/2;
+            // Ground and Ceiling Collisions
+            const ceilLimit = this.height/2;
+            const groundLimit = canvas.height - groundHeight - this.height/2;
+            
+            if (this.y >= groundLimit) {
+                this.y = groundLimit;
                 this.velocity = 0;
             }
-            if (this.y - this.height/2 <= 0) {
-                this.y = this.height/2;
+            if (this.y <= ceilLimit) {
+                this.y = ceilLimit;
                 this.velocity = 0;
             }
         }
@@ -129,59 +167,196 @@
     class Obstacle {
         constructor() {
             this.x = canvas.width;
-            this.width = 50;
-            this.gap = 130; // Space between top and bottom pillar
+            this.width = 60;
+            this.gap = 140; // Fitting space
             
-            // Randomize the gap position
-            this.topHeight = Math.random() * (canvas.height - this.gap - 40) + 20;
+            // Randomize position securely above ground layer
+            let availableHeight = canvas.height - groundHeight - this.gap - 60;
+            this.topHeight = Math.random() * availableHeight + 30;
             this.bottomY = this.topHeight + this.gap;
-            this.bottomHeight = canvas.height - this.bottomY;
-            this.speed = 4;
+            this.bottomHeight = canvas.height - groundHeight - this.bottomY;
             this.passed = false;
         }
 
+        drawBlock(x, y, width, height) {
+            // Draw GD block design (Dark core with glowing cyan border)
+            ctx.fillStyle = "#141923";
+            ctx.fillRect(x, y, width, height);
+            
+            ctx.strokeStyle = "#00c6ff";
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = "#00c6ff";
+            ctx.strokeRect(x, y, width, height);
+            
+            // Inside design line
+            ctx.strokeStyle = "rgba(0, 198, 255, 0.3)";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 5, y + 5, width - 10, height - 10);
+            ctx.shadowBlur = 0;
+        }
+
+        drawSpike(x, y, isUpsideDown) {
+            ctx.fillStyle = "#202836";
+            ctx.strokeStyle = "#ff0055";
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = "#ff0055";
+            
+            ctx.beginPath();
+            if (isUpsideDown) {
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + 30, y + 35);
+                ctx.lineTo(x + 60, y);
+            } else {
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + 30, y - 35);
+                ctx.lineTo(x + 60, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
         draw() {
-            ctx.fillStyle = "#2ecc71"; // Green obstacles
-            // Top pillar
-            ctx.fillRect(this.x, 0, this.width, this.topHeight);
-            // Bottom pillar
-            ctx.fillRect(this.x, this.bottomY, this.width, this.bottomHeight);
+            // Draw Pillars
+            this.drawBlock(this.x, 0, this.width, this.topHeight);
+            this.drawBlock(this.x, this.bottomY, this.width, this.bottomHeight);
+
+            // Draw Hazards (Spikes attached to pillars)
+            this.drawSpike(this.x, this.topHeight, true); // Top spike pointing down
+            this.drawSpike(this.x, this.bottomY, false); // Bottom spike pointing up
         }
 
         update() {
-            this.x -= this.speed;
+            this.x -= gameSpeed;
 
-            // Collision Detection
-            // Using a slightly smaller hitbox for the rocket to make it fair
-            let hitboxLeft = rocket.x - rocket.width/2 + 5;
-            let hitboxRight = rocket.x + rocket.width/2 + 10;
-            let hitboxTop = rocket.y - rocket.height/2 + 5;
-            let hitboxBottom = rocket.y + rocket.height/2 - 5;
+            // Exact Precise bounding box collision for ship
+            let sLeft = ship.x - ship.width/2 + 4;
+            let sRight = ship.x + ship.width/2 - 4;
+            let sTop = ship.y - ship.height/2 + 4;
+            let sBottom = ship.y + ship.height/2 - 4;
 
-            // Check if within X bounds of obstacle
-            if (hitboxRight > this.x && hitboxLeft < this.x + this.width) {
-                // Check if hitting Top or Bottom pillar
-                if (hitboxTop < this.topHeight || hitboxBottom > this.bottomY) {
-                    gameOver = true;
+            // Check Pillar Collision
+            if (sRight > this.x && sLeft < this.x + this.width) {
+                if (sTop < this.topHeight || sBottom > this.bottomY) {
+                    triggerExplosion();
+                }
+                // Check Spike Collision (Rough proximity check inside spike danger zones)
+                if (sTop < this.topHeight + 32 || sBottom > this.bottomY - 32) {
+                    triggerExplosion();
                 }
             }
 
-            // Score updating
-            if (this.x + this.width < rocket.x && !this.passed) {
+            if (this.x + this.width < ship.x && !this.passed) {
                 score++;
                 this.passed = true;
+                // Gradually speed up level like real GD
+                if (score % 5 === 0) gameSpeed += 0.5;
             }
         }
     }
 
-    // Input Listeners (Hold to fly, release to fall)
+    function triggerExplosion() {
+        gameOver = true;
+        // Explode ship into iconic GD square chunks
+        for (let i = 0; i < 40; i++) {
+            createParticle(
+                ship.x, 
+                ship.y, 
+                i % 2 === 0 ? "#00ff66" : "#ffff00", 
+                Math.random() * 8 + 4, 
+                (Math.random() - 0.5) * 12, 
+                (Math.random() - 0.5) * 12, 
+                40
+            );
+        }
+    }
+
+    // Background and Ground Grid Rendering
+    function drawBackground() {
+        bgScroll -= gameSpeed * 0.3;
+        if (bgScroll <= -60) bgScroll = 0;
+
+        // Grid Lines
+        ctx.strokeStyle = "#161b26";
+        ctx.lineWidth = 1;
+        for (let x = bgScroll; x < canvas.width; x += 60) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height - groundHeight);
+            ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height - groundHeight; y += 60) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+
+        // Deep horizon glow
+        let gradient = ctx.createLinearGradient(0, canvas.height - groundHeight - 100, 0, canvas.height - groundHeight);
+        gradient.addColorStop(0, "rgba(0, 198, 255, 0)");
+        gradient.addColorStop(1, "rgba(0, 198, 255, 0.08)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, canvas.height - groundHeight - 100, canvas.width, 100);
+    }
+
+    function drawGround() {
+        const gY = canvas.height - groundHeight;
+        
+        // Ground Fill
+        ctx.fillStyle = "#090d14";
+        ctx.fillRect(0, gY, canvas.width, groundHeight);
+
+        // Neon Top Line
+        ctx.strokeStyle = "#00c6ff";
+        ctx.lineWidth = 4;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#00c6ff";
+        ctx.beginPath();
+        ctx.moveTo(0, gY);
+        ctx.lineTo(canvas.width, gY);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Ground Grid Details
+        ctx.strokeStyle = "rgba(0, 198, 255, 0.2)";
+        ctx.lineWidth = 2;
+        let groundScroll = (bgScroll * 1.5) % 30;
+        for (let x = groundScroll; x < canvas.width; x += 30) {
+            ctx.beginPath();
+            ctx.moveTo(x, gY);
+            ctx.lineTo(x - 20, canvas.height); // Angled grid lines
+            ctx.stroke();
+        }
+    }
+
+    function handleParticles() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.speedX;
+            p.y += p.speedY;
+            p.life--;
+
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life / p.maxLife;
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+            
+            if (p.life <= 0) {
+                particles.splice(i, 1);
+            }
+        }
+        ctx.globalAlpha = 1.0; // Reset transparency
+    }
+
+    // Input Handlers
     function startFlying(e) {
         if (e.type !== 'keydown' || e.code === 'Space') {
-            if (gameOver) resetGame();
-            else isFlying = true;
-            
-            // Prevent scrolling on spacebar/touch
-            if(e.type === 'keydown' && e.code === 'Space') e.preventDefault();
+            if (gameOver && frames > 30) resetGame();
+            else if (!gameOver) isFlying = true;
+            if(e.code === 'Space') e.preventDefault();
         }
     }
 
@@ -199,11 +374,14 @@
     canvas.addEventListener("touchend", stopFlying);
 
     function resetGame() {
-        rocket.y = 200;
-        rocket.velocity = 0;
+        ship.y = 200;
+        ship.velocity = 0;
+        ship.rotation = 0;
         obstacles.length = 0;
+        particles.length = 0;
         score = 0;
         frames = 0;
+        gameSpeed = 5;
         gameOver = false;
         isFlying = false;
     }
@@ -212,60 +390,41 @@
     function animate() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (!gameOver) {
-            rocket.update();
-            rocket.draw();
+        // 1. Render Background Environment
+        drawBackground();
 
-            // Spawn obstacles every 90 frames
-            if (frames % 90 === 0) {
+        if (!gameOver) {
+            // 2. Update Dynamics
+            ship.update();
+
+            if (frames % 100 === 0) {
                 obstacles.push(new Obstacle());
             }
 
-            for (let i = 0; i < obstacles.length; i++) {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
                 obstacles[i].update();
                 obstacles[i].draw();
+                if (obstacles[i].x < -100) obstacles.shift();
             }
-
-            // Remove off-screen obstacles to save memory
-            if (obstacles.length > 0 && obstacles[0].x < -50) {
-                obstacles.shift();
-            }
-
-            // Draw Score
-            ctx.fillStyle = "white";
-            ctx.font = "30px Arial";
-            ctx.fillText("Score: " + score, 20, 40);
 
             frames++;
         } else {
-            // Game Over Screen
-            rocket.draw(); // Draw final position
-            
-            // Draw Obstacles
+            // Frozen updates for obstacles while dead, still run custom particles
             for (let i = 0; i < obstacles.length; i++) {
                 obstacles[i].draw();
             }
-
-            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.fillStyle = "white";
-            ctx.font = "50px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText("CRASHED!", canvas.width / 2, canvas.height / 2 - 20);
-            
-            ctx.font = "25px Arial";
-            ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 20);
-            ctx.fillText("Click or Press Space to Restart", canvas.width / 2, canvas.height / 2 + 60);
-            ctx.textAlign = "left"; // Reset text align
         }
 
-        requestAnimationFrame(animate);
-    }
+        // 3. Render Entities & Visual Effects
+        handleParticles();
+        if (!gameOver) ship.draw();
+        drawGround();
 
-    // Start Game
-    animate();
-</script>
-
-</body>
-</html>
+        // 4. GD Classic UI Display
+        // Percentage/Score Bar
+        ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.fillRect(canvas.width/2 - 150, 15, 300, 6);
+        
+        let progress = Math.min((score * 15), 300); // Progress simulation bar
+        ctx.fillStyle = "#00c6ff";
+        ctx.fillRect(
