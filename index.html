@@ -1,792 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
+
+<style type="text/css">
+  h1 {
+	  font-family: Arial, Helvetica, sans-serif;
+	  color: #F00;
+	  font-size: x-large;
+  }
+  p {
+	  font-family: Arial, Helvetica, sans-serif;
+	  color: #000;
+	  font-size: small;
+  }
+  body {
+	  background-color: #FFF;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+  }
+  #bloctxt {
+	  border-left-width: 5px;
+	  border-left-style: solid;
+	  border-left-color: #F00;
+	  padding-left: 10px;
+	  position: absolute;
+	  left: 50%%;
+	  width: 600px;
+	  margin-left: -260px
+  }
+</style>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal File Assembler & Game Engine</title>
-    <!-- JSZip for processing ZIP archives in-browser -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    
-    <!-- Firebase App (the core Firebase SDK) -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <!-- Firebase Products -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
 
-    <style>
-        :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --accent: #6366f1;
-            --accent-hover: #4f46e5;
-            --game-accent: #10b981;
-            --game-hover: #059669;
-            --share-accent: #eab308;
-            --share-hover: #ca8a04;
-            --text: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: #334155;
-        }
+  <!-- Enables full-screen on iOS devices -->
+  <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, target-densitydpi=device-dpi" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="HandheldFriendly" content="true" />
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
+  <title>Clickteam Fusion Developer 2.5 HTML5 Runtime</title>
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 2rem 1rem;
-        }
+	<script>
+	   	// Detection of old browsers that do not support the canvas element
+		// Falls back to a default page
+	    if (!document.createElement("canvas").getContext)
+	    {
+			window.open("http://www.clickteam.com/html5-fallback", "_self");
+		}
+	</script>
 
-        .container {
-            width: 100%;
-            max-width: 1150px;
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-        }
 
-        header { text-align: center; }
-        header h1 { font-size: 2.2rem; margin-bottom: 0.5rem; }
-        header p { color: var(--text-muted); }
+  	<!-- EXTRASOURCES -->
+    <!-- Loads the Javascript code...-->
+    <script src="src/Runtime.js"></script>
 
-        .tabs {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            margin-bottom: 1rem;
-            border-bottom: 2px solid var(--border);
-            padding-bottom: 1rem;
-        }
+    <script>
 
-        .tab-btn {
-            background: transparent;
-            color: var(--text-muted);
-            border: 2px solid transparent;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
+	// Detection of when the html file is ran locally.
+	// You can remove this code for the final version
+	if (window.location.protocol == "file:")
+	{
+		document.write('<div id="bloctxt">');
+		document.write('<h1>The application cannot be run...</h1>');
+		document.write('<p>HTML browsers do not allow you to launch data files directly from the file system.<br>');
+		document.write('A drag & drop of the html file on a web-browser window will not work, on any machine.<br>');
+		document.write('Please use the Build & Run option (it opens a local web server) to run your application,<br>')
+		document.write('or upload your application folder to a remote web-server, and start it from there...</p>');
+		document.write('</div>');
+		throw new error("Cannot run application");
+	}
 
-        .tab-btn:hover { color: var(--text); background: var(--card-bg); }
-        .tab-btn.active { background: var(--accent); color: white; }
-
-        .upload-zone {
-            border: 2px dashed var(--border);
-            border-radius: 12px;
-            background-color: var(--card-bg);
-            padding: 2rem;
-            text-align: center;
-            cursor: pointer;
-            transition: border-color 0.2s, background-color 0.2s;
-        }
-
-        .upload-zone:hover, .upload-zone.dragover {
-            border-color: var(--accent);
-            background-color: #1e293b80;
-        }
-
-        .actions-bar {
-            display: flex;
-            gap: 0.75rem;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 1rem;
-        }
-
-        input[type="file"] { display: none; }
-
-        .btn {
-            background-color: var(--accent);
-            color: white;
-            border: none;
-            padding: 0.65rem 1.25rem;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            text-decoration: none;
-            font-size: 0.9rem;
-        }
-
-        .btn:hover { background-color: var(--accent-hover); }
-        .btn-game { background-color: var(--game-accent); }
-        .btn-game:hover { background-color: var(--game-hover); }
-        .btn-share { background-color: var(--share-accent); color: #000; }
-        .btn-share:hover { background-color: var(--share-hover); }
-        .btn-danger { background-color: #ef4444; }
-        .btn-danger:hover { background-color: #dc2626; }
-
-        .main-layout {
-            display: grid;
-            grid-template-columns: 320px 1fr;
-            gap: 1.5rem;
-        }
-
-        @media (max-width: 850px) {
-            .main-layout { grid-template-columns: 1fr; }
-        }
-
-        .file-list-card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1rem;
-            max-height: 600px;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .file-list-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .file-items-container { overflow-y: auto; flex-grow: 1; }
-
-        .file-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.65rem 0.8rem;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-bottom: 0.5rem;
-            background-color: #0f172a50;
-            border: 1px solid transparent;
-            transition: background 0.2s, border 0.2s;
-        }
-
-        .file-item:hover { background-color: #334155; border-color: var(--accent); }
-
-        .file-info { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .file-name { font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; }
-        .file-size { font-size: 0.75rem; color: var(--text-muted); }
-
-        .player-card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 560px;
-            position: relative;
-        }
-
-        .player-content {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            flex-grow: 1;
-        }
-
-        iframe { width: 100%; height: 520px; border: none; border-radius: 8px; background: #000; }
-        .placeholder { color: var(--text-muted); text-align: center; padding: 2rem; }
-        
-        .assembly-status {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            background: #10b98115;
-            border: 1px solid #10b98140;
-            border-radius: 8px;
-            color: #34d399;
-            font-size: 0.85rem;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        /* Public Projects Grid */
-        .projects-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.5rem;
-            width: 100%;
-        }
-
-        .project-card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            transition: transform 0.2s;
-        }
-
-        .project-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--accent);
-        }
-
-        .project-card h3 { font-size: 1.2rem; color: white; }
-        .project-card p { font-size: 0.85rem; color: var(--text-muted); }
-
-        /* Loader */
-        .loader {
-            border: 4px solid var(--border);
-            border-top: 4px solid var(--accent);
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+  </script>
 </head>
+
 <body>
 
-<div class="container">
-    <header>
-        <h1>⚡ Universal Engine Hub</h1>
-        <p>Build, assemble, and share web games instantly.</p>
-    </header>
-
-    <div class="tabs">
-        <button id="tab-workspace" class="tab-btn active" onclick="switchView('workspace')">🛠️ My Workspace</button>
-        <button id="tab-public" class="tab-btn" onclick="switchView('public')">🌐 Public Projects</button>
-    </div>
-
-    <!-- WORKSPACE VIEW -->
-    <div id="view-workspace">
-        <div class="upload-zone" id="drop-zone">
-            <h3>Drag & Drop Files, Folders, or ZIP Packages</h3>
-            <p>Drop <code>.html</code>, <code>.css</code>, <code>.js</code>, images, and audio files all at once!</p>
-            <div class="actions-bar">
-                <button class="btn" onclick="document.getElementById('file-input').click()">📁 Select Files</button>
-                <button class="btn" onclick="document.getElementById('folder-input').click()">📂 Select Folder</button>
-                <button class="btn btn-share" onclick="publishProject()">🌍 Publish Project</button>
-                <button class="btn btn-danger" onclick="clearVFS()">🗑️ Reset</button>
-            </div>
-            <input type="file" id="file-input" multiple>
-            <input type="file" id="folder-input" webkitdirectory directory multiple>
-        </div>
-
-        <div class="main-layout" style="margin-top: 1.5rem;">
-            <div class="file-list-card">
-                <div class="file-list-header">
-                    <h3>Assembled VFS (<span id="file-count">0</span>)</h3>
-                </div>
-                <div class="file-items-container" id="file-list">
-                    <p class="placeholder" style="font-size: 0.85rem;">No files loaded into memory.</p>
-                </div>
-            </div>
-
-            <div class="player-card" id="player-card-container">
-                <div id="assembly-banner" style="display: none; width: 100%;"></div>
-                <div class="player-content" id="media-display">
-                    <p class="placeholder">Upload files or click a public project to start playing!</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- PUBLIC PROJECTS VIEW -->
-    <div id="view-public" style="display: none;">
-        <div id="public-loader" style="text-align: center; padding: 3rem;">
-            <div class="loader"></div>
-            <p style="margin-top: 1rem; color: var(--text-muted);">Fetching public projects...</p>
-        </div>
-        <div class="projects-grid" id="projects-grid"></div>
-    </div>
+<div style="display: inline-block; -webkit-user-select: none; text-align: left;">
+    <canvas id="MMFCanvas" width="1280" height="720">
+    	Your browser does not support Canvas.
+    </canvas>
 </div>
 
-<script>
-    // --- FIREBASE INITIALIZATION ---
-    const firebaseConfig = {
-        apiKey: "AIzaSyC6fcHsdtBCHLWDLKm9yIJokgeoll0i7c0",
-        authDomain: "os-chat-and-phone.firebaseapp.com",
-        databaseURL: "https://os-chat-and-phone-default-rtdb.firebaseio.com",
-        projectId: "os-chat-and-phone",
-        storageBucket: "os-chat-and-phone.firebasestorage.app",
-        messagingSenderId: "177525708536",
-        appId: "1:177525708536:web:0238d2be8837452a214d0d",
-        measurementId: "G-SBKNFS2LRE"
-    };
-    
-    // Initialize Firebase
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
-    const db = firebase.database();
-    const storage = firebase.storage();
 
-    // --- VIRTUAL FILE SYSTEM (VFS) STATE ---
-    const vfs = new Map();
-
-    // UI Elements
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
-    const folderInput = document.getElementById('folder-input');
-    const fileListEl = document.getElementById('file-list');
-    const mediaDisplay = document.getElementById('media-display');
-    const fileCountEl = document.getElementById('file-count');
-    const assemblyBanner = document.getElementById('assembly-banner');
-    
-    const viewWorkspace = document.getElementById('view-workspace');
-    const viewPublic = document.getElementById('view-public');
-    const tabWorkspace = document.getElementById('tab-workspace');
-    const tabPublic = document.getElementById('tab-public');
-
-    // --- VIEW SWITCHING ---
-    function switchView(view) {
-        if (view === 'workspace') {
-            viewWorkspace.style.display = 'block';
-            viewPublic.style.display = 'none';
-            tabWorkspace.classList.add('active');
-            tabPublic.classList.remove('active');
-        } else {
-            viewWorkspace.style.display = 'none';
-            viewPublic.style.display = 'block';
-            tabWorkspace.classList.remove('active');
-            tabPublic.classList.add('active');
-            loadPublicProjects();
+    <script>
+        // RUNTIMESTART
+        // This is where the HTML5 runtime is actually started
+        window.addEventListener("load", windowLoaded, false);
+        function windowLoaded()
+        {
+            // Calls the runtime
+            // First parameter : name of the canvas element
+            // Second parameter : path to the cch file. Images and sounds must lay beside this file
+            new Runtime("MMFCanvas", "resources/FNAF1HTML5.cch");
         }
-    }
+        // RUNTIMESTARTEND
+    </script>
 
-    // --- DRAG & DROP LOGIC ---
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => dropZone.addEventListener(evt, preventDefaults, false));
-    function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
-    ['dragenter', 'dragover'].forEach(evt => dropZone.addEventListener(evt, () => dropZone.classList.add('dragover'), false));
-    ['dragleave', 'drop'].forEach(evt => dropZone.addEventListener(evt, () => dropZone.classList.remove('dragover'), false));
-    dropZone.addEventListener('drop', async (e) => {
-        const items = e.dataTransfer.items;
-        if (items) {
-            const entries = await getFilesFromDataTransferItems(items);
-            await processFiles(entries);
-        } else {
-            await handleFileList(e.dataTransfer.files);
-        }
-    });
-    fileInput.addEventListener('change', async (e) => await handleFileList(e.target.files));
-    folderInput.addEventListener('change', async (e) => await handleFileList(e.target.files));
-
-    async function handleFileList(fileList) {
-        const entries = Array.from(fileList).map(file => ({
-            file, path: file.webkitRelativePath || file.name
-        }));
-        await processFiles(entries);
-    }
-
-    async function getFilesFromDataTransferItems(items) {
-        const fileEntries = [];
-        const queue = [];
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.kind === 'file') {
-                const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-                if (entry) queue.push({ entry, path: '' });
-                else {
-                    const f = item.getAsFile();
-                    if (f) fileEntries.push({ file: f, path: f.name });
-                }
-            }
-        }
-        while (queue.length > 0) {
-            const { entry, path } = queue.shift();
-            if (entry.isFile) {
-                const file = await new Promise(res => entry.file(res));
-                fileEntries.push({ file, path: path + file.name });
-            } else if (entry.isDirectory) {
-                const dirReader = entry.createReader();
-                const entries = await new Promise(res => dirReader.readEntries(res));
-                for (const child of entries) { queue.push({ entry: child, path: path + entry.name + '/' }); }
-            }
-        }
-        return fileEntries;
-    }
-
-    async function processFiles(fileEntries) {
-        if (fileEntries.length === 0) return;
-        const zipEntry = fileEntries.find(e => e.file.name.toLowerCase().endsWith('.zip'));
-        if (zipEntry) {
-            await extractZip(zipEntry.file);
-            return;
-        }
-        for (const { file, path } of fileEntries) { await addFileToVFS(file, path); }
-        renderVFSList();
-        autoRunAssembledProject();
-    }
-
-    async function extractZip(zipFile) {
-        try {
-            const zip = await JSZip.loadAsync(zipFile);
-            const promises = [];
-            zip.forEach((relativePath, entry) => {
-                if (!entry.dir) {
-                    const p = entry.async('blob').then(async (blob) => {
-                        const file = new File([blob], entry.name.split('/').pop(), { type: getMimeType(entry.name) });
-                        await addFileToVFS(file, relativePath);
-                    });
-                    promises.push(p);
-                }
-            });
-            await Promise.all(promises);
-            renderVFSList();
-            autoRunAssembledProject();
-        } catch (err) { alert("Error unzipping file: " + err.message); }
-    }
-
-    async function addFileToVFS(file, rawPath) {
-        const cleanPath = cleanPathName(rawPath);
-        const fileName = file.name.toLowerCase();
-        const url = URL.createObjectURL(file);
-        let textContent = null;
-        const category = getCategory(fileName);
-
-        if (['html', 'css', 'js', 'text'].includes(category)) {
-            try { textContent = await file.text(); } catch(e){}
-        }
-
-        vfs.set(cleanPath, {
-            file, url, text: textContent, cleanPath, rawName: file.name,
-            size: file.size, type: file.type || getMimeType(file.name), category
-        });
-
-        if (!vfs.has(fileName)) { vfs.set(fileName, vfs.get(cleanPath)); }
-    }
-
-    function cleanPathName(path) { return path.replace(/\\/g, '/').toLowerCase().replace(/^(\.\/|\/)+/, ''); }
-
-    function getCategory(filename) {
-        const ext = filename.split('.').pop().toLowerCase();
-        if (['html', 'htm'].includes(ext)) return 'html';
-        if (['css'].includes(ext)) return 'css';
-        if (['js', 'mjs'].includes(ext)) return 'js';
-        if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'img';
-        if (['mp3', 'wav', 'ogg'].includes(ext)) return 'media';
-        return 'text';
-    }
-
-    function getMimeType(filename) {
-        const ext = filename.split('.').pop().toLowerCase();
-        const mimes = {
-            'html': 'text/html', 'css': 'text/css', 'js': 'text/javascript',
-            'png': 'image/png', 'jpg': 'image/jpeg', 'mp3': 'audio/mpeg',
-            'wav': 'audio/wav', 'ogg': 'audio/ogg'
-        };
-        return mimes[ext] || 'application/octet-stream';
-    }
-
-    function renderVFSList() {
-        fileCountEl.textContent = vfs.size;
-        if (vfs.size === 0) {
-            fileListEl.innerHTML = `<p class="placeholder" style="font-size: 0.85rem;">No files loaded into memory.</p>`;
-            return;
-        }
-        fileListEl.innerHTML = '';
-        const uniqueEntries = Array.from(vfs.values()).filter((item, idx, self) => idx === self.findIndex(t => t.cleanPath === item.cleanPath));
-        uniqueEntries.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'file-item';
-            div.innerHTML = `
-                <div class="file-info">
-                    <div class="file-name" title="${item.cleanPath}">${item.rawName}</div>
-                    <div class="file-size">${formatBytes(item.size)}</div>
-                </div>
-            `;
-            fileListEl.appendChild(div);
-        });
-    }
-
-    function clearVFS() {
-        vfs.clear();
-        renderVFSList();
-        assemblyBanner.style.display = 'none';
-        mediaDisplay.innerHTML = `<p class="placeholder">Upload files or click a public project to start playing!</p>`;
-    }
-
-    function autoRunAssembledProject() {
-        const entries = Array.from(vfs.values());
-        const htmlEntry = entries.find(e => e.rawName.toLowerCase() === 'index.html') || entries.find(e => e.category === 'html');
-        if (htmlEntry) launchAssembledApp(htmlEntry.cleanPath);
-    }
-
-    function resolveVFSPath(query) {
-        let clean = cleanPathName(query);
-        if (vfs.has(clean)) return vfs.get(clean);
-        for (const [key, val] of vfs.entries()) {
-            if (key.endsWith(clean) || clean.endsWith(key) || val.rawName.toLowerCase() === clean) return val;
-        }
-        return null;
-    }
-
-    function resolveCSSUrls(cssText) {
-        return cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, quote, path) => {
-            const assetItem = resolveVFSPath(path);
-            if (assetItem) return `url("${assetItem.url}")`;
-            return match;
-        });
-    }
-
-    // --- FULL ENGINE INTERCEPTOR RESTORED ---
-    async function assembleHTML(mainHtmlPath) {
-        const htmlEntry = vfs.get(mainHtmlPath);
-        if (!htmlEntry || !htmlEntry.text) return '';
-        let html = htmlEntry.text;
-
-        // 1. Resolve and Inline CSS files
-        html = html.replace(/<link[^>]+href=["']([^"']+)["'][^>]*>/gi, (match, href) => {
-            const cssItem = resolveVFSPath(href);
-            if (cssItem && cssItem.text) {
-                const resolvedCSS = resolveCSSUrls(cssItem.text);
-                return `<style>/* Injected from ${href} */\n${resolvedCSS}</style>`;
-            }
-            return match;
-        });
-
-        // 2. Resolve CSS inside existing <style> tags
-        html = html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (match, cssContent) => {
-            return `<style>${resolveCSSUrls(cssContent)}</style>`;
-        });
-
-        // 3. Resolve and Inline JS files
-        html = html.replace(/<script[^>]+src=["']([^"']+)["'][^>]*>\s*<\/script>/gi, (match, src) => {
-            const jsItem = resolveVFSPath(src);
-            if (jsItem && jsItem.text) {
-                return `<script>/* Injected from ${src} */\n${jsItem.text}<\/script>`;
-            }
-            return match;
-        });
-
-        // 4. Resolve static Image / Media src attributes
-        html = html.replace(/(<img|<audio|<video|<source|<input)\b[^>]*?\bsrc=["']([^"']+)["']/gi, (match, tag, src) => {
-            const assetItem = resolveVFSPath(src);
-            if (assetItem) {
-                return match.replace(src, assetItem.url);
-            }
-            return match;
-        });
-
-        // 5. Heavy-Duty Runtime Interceptor
-        const vfsMapObj = {};
-        vfs.forEach((val, key) => { vfsMapObj[key] = val.url; vfsMapObj[val.rawName.toLowerCase()] = val.url; });
-
-        const runtimeInterceptor = `
-        <style>
-            html, body { margin: 0 !important; width: 100vw; height: 100vh; overflow: hidden; background: #000; } 
-            canvas { width: 100% !important; height: 100% !important; object-fit: contain; }
-        </style>
-        <script>
-        (function() {
-            const vfsMap = ${JSON.stringify(vfsMapObj)};
-            
-            function resolve(url) {
-                if (!url || typeof url !== 'string' || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) return url;
-                let clean = url.split('?')[0].split('#')[0].replace(/\\\\/g, '/').replace(/^(\\.\\/|\\/)+/, '').toLowerCase();
-                if (vfsMap[clean]) return vfsMap[clean];
-                let justName = clean.split('/').pop();
-                if (vfsMap[justName]) return vfsMap[justName];
-                for (let k in vfsMap) { if (k.endsWith(clean) || clean.endsWith(k)) return vfsMap[k]; }
-                return url;
-            }
-
-            // Intercept new Image()
-            const imgDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-            if (imgDesc && imgDesc.set) {
-                Object.defineProperty(HTMLImageElement.prototype, 'src', {
-                    set: function(val) { imgDesc.set.call(this, resolve(val)); },
-                    get: function() { return imgDesc.get.call(this); }
-                });
-            }
-
-            // Intercept media elements (like audio)
-            const mediaDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-            if (mediaDesc && mediaDesc.set) {
-                Object.defineProperty(HTMLMediaElement.prototype, 'src', {
-                    set: function(val) { mediaDesc.set.call(this, resolve(val)); },
-                    get: function() { return mediaDesc.get.call(this); }
-                });
-            }
-
-            // Intercept setAttribute
-            const origSetAttr = Element.prototype.setAttribute;
-            Element.prototype.setAttribute = function(name, value) {
-                if (name.toLowerCase() === 'src') value = resolve(value);
-                return origSetAttr.call(this, name, value);
-            };
-
-            // Intercept new Audio()
-            const origAudio = window.Audio;
-            window.Audio = function(src) {
-                return new origAudio(resolve(src));
-            };
-
-            // Intercept fetch
-            const origFetch = window.fetch;
-            window.fetch = function(input, init) {
-                if (typeof input === 'string') input = resolve(input);
-                return origFetch.call(this, input, init);
-            };
-
-            // Intercept XMLHttpRequest
-            const origOpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function(method, url, ...args) {
-                return origOpen.call(this, method, resolve(url), ...args);
-            };
-        })();
-        <\/script>`;
-        
-        return html.includes('<head>') ? html.replace('<head>', '<head>' + runtimeInterceptor) : runtimeInterceptor + html;
-    }
-
-    async function launchAssembledApp(htmlPath) {
-        mediaDisplay.innerHTML = '';
-        const assembledCode = await assembleHTML(htmlPath);
-        
-        assemblyBanner.style.display = 'flex';
-        assemblyBanner.innerHTML = `<span>✨ <b>App Running:</b> Engine loaded successfully!</span>`;
-
-        const iframe = document.createElement('iframe');
-        iframe.sandbox = "allow-scripts allow-same-origin allow-modals allow-forms";
-        // Create Blob and generate an object URL so relative fetching from engine isn't blocked by origin policies
-        const blob = new Blob([assembledCode], { type: 'text/html' });
-        iframe.src = URL.createObjectURL(blob);
-        
-        mediaDisplay.appendChild(iframe);
-        iframe.onload = () => iframe.focus();
-    }
-
-    function formatBytes(bytes) {
-        if (!bytes || bytes === 0) return '0 Bytes';
-        const k = 1024, sizes = ['Bytes', 'KB', 'MB', 'GB'], i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    // --- FIREBASE PUBLISH / PUBLIC PROJECTS LOGIC ---
-
-    async function publishProject() {
-        if (vfs.size === 0) return alert("Your workspace is empty! Upload files to share them.");
-        
-        const projectName = prompt("Name your project to publish:", "My Retro Game");
-        if (!projectName || projectName.trim() === "") return;
-
-        const btn = document.querySelector('.btn-share');
-        const origText = btn.innerHTML;
-        btn.innerHTML = "⏳ Zipping...";
-        btn.disabled = true;
-
-        try {
-            // 1. Pack VFS into a ZIP
-            const zip = new JSZip();
-            vfs.forEach((val, key) => {
-                // Ensure we don't duplicate paths or dump root files incorrectly
-                if(val.file) zip.file(val.cleanPath, val.file);
-            });
-            const zipBlob = await zip.generateAsync({ type: "blob" });
-
-            // 2. Upload to Firebase Storage
-            btn.innerHTML = "☁️ Uploading...";
-            const fileName = `projects/${Date.now()}_${Math.floor(Math.random() * 1000)}.zip`;
-            const fileRef = storage.ref(fileName);
-            await fileRef.put(zipBlob);
-            const downloadURL = await fileRef.getDownloadURL();
-
-            // 3. Save reference to Realtime Database
-            btn.innerHTML = "📝 Saving...";
-            await db.ref('public_projects').push({
-                title: projectName.trim(),
-                url: downloadURL,
-                fileCount: vfs.size,
-                createdAt: firebase.database.ServerValue.TIMESTAMP
-            });
-
-            alert(`Success! "${projectName}" is now public.`);
-            switchView('public'); // Jump to public tab
-
-        } catch (error) {
-            console.error(error);
-            alert("Failed to publish: " + error.message);
-        } finally {
-            btn.innerHTML = origText;
-            btn.disabled = false;
-        }
-    }
-
-    function loadPublicProjects() {
-        const grid = document.getElementById('projects-grid');
-        const loader = document.getElementById('public-loader');
-        
-        grid.innerHTML = '';
-        loader.style.display = 'block';
-
-        db.ref('public_projects').orderByChild('createdAt').limitToLast(50).once('value', snapshot => {
-            loader.style.display = 'none';
-            if (!snapshot.exists()) {
-                grid.innerHTML = `<p class="placeholder" style="grid-column: 1/-1;">No public projects found yet. Be the first to share one!</p>`;
-                return;
-            }
-
-            const projects = [];
-            snapshot.forEach(child => {
-                projects.push({ id: child.key, ...child.val() });
-            });
-            // Reverse so newest is first
-            projects.reverse().forEach(proj => {
-                const date = new Date(proj.createdAt).toLocaleDateString();
-                const card = document.createElement('div');
-                card.className = 'project-card';
-                card.innerHTML = `
-                    <div>
-                        <h3>${proj.title}</h3>
-                        <p>Uploaded: ${date} • ${proj.fileCount || '?'} files</p>
-                    </div>
-                    <button class="btn btn-game" onclick="downloadAndPlayProject('${proj.url}')">🎮 Load & Play</button>
-                `;
-                grid.appendChild(card);
-            });
-        });
-    }
-
-    async function downloadAndPlayProject(zipUrl) {
-        // Switch back to workspace view to show the game loading
-        switchView('workspace');
-        clearVFS();
-        
-        mediaDisplay.innerHTML = `
-            <div style="text-align: center;">
-                <div class="loader"></div>
-                <p style="margin-top: 1rem; color: var(--accent);">Downloading project assets...</p>
-            </div>
-        `;
-
-        try {
-            // Note: Firebase Storage bucket MUST have CORS configured to allow GET requests from your domain
-            const response = await fetch(zipUrl);
-            if (!response.ok) throw new Error("Network response was not ok.");
-            const blob = await response.blob();
-            const file = new File([blob], "downloaded_project.zip", { type: "application/zip" });
-            
-            await extractZip(file);
-        } catch (error) {
-            console.error(error);
-            mediaDisplay.innerHTML = `<p class="placeholder" style="color: #ef4444;">Failed to download game. Make sure CORS is configured on your Firebase Storage bucket.<br><br>Error: ${error.message}</p>`;
-        }
-    }
-</script>
 </body>
 </html>
