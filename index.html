@@ -445,6 +445,26 @@
             <button id="btn-growth" class="btn-mode" onclick="selectMode('growth')">Growth</button>
             <button id="btn-vortex" class="btn-mode" onclick="selectMode('vortex')">Vortex</button>
             <button id="btn-meteor" class="btn-mode" onclick="selectMode('meteor')">Meteor</button>
+            <button id="btn-assassin" class="btn-mode" onclick="selectMode('assassin')">Assassin</button>
+            <button id="btn-berserker" class="btn-mode" onclick="selectMode('berserker')">Berserker</button>
+            <button id="btn-chaos" class="btn-mode" onclick="selectMode('chaos')">Chaos</button>
+            <button id="btn-hunter" class="btn-mode" onclick="selectMode('hunter')">Hunter</button>
+            <button id="btn-nova" class="btn-mode" onclick="selectMode('nova')">Nova</button>
+            <button id="btn-pulse" class="btn-mode" onclick="selectMode('pulse')">Pulse</button>
+            <button id="btn-phase" class="btn-mode" onclick="selectMode('phase')">Phase</button>
+            <button id="btn-mirror" class="btn-mode" onclick="selectMode('mirror')">Mirror</button>
+            <button id="btn-glass" class="btn-mode" onclick="selectMode('glass')">Glass</button>
+            <button id="btn-giant" class="btn-mode" onclick="selectMode('giant')">Giant</button>
+            <button id="btn-frenzy" class="btn-mode" onclick="selectMode('frenzy')">Frenzy</button>
+            <button id="btn-snare" class="btn-mode" onclick="selectMode('snare')">Snare</button>
+            <button id="btn-timewarp" class="btn-mode" onclick="selectMode('timewarp')">Timewarp</button>
+            <button id="btn-bouncer" class="btn-mode" onclick="selectMode('bouncer')">Bouncer</button>
+            <button id="btn-pacifist" class="btn-mode" onclick="selectMode('pacifist')">Pacifist</button>
+            <button id="btn-surge" class="btn-mode" onclick="selectMode('surge')">Surge</button>
+            <button id="btn-rage" class="btn-mode" onclick="selectMode('rage')">Rage</button>
+            <button id="btn-magnetstorm" class="btn-mode" onclick="selectMode('magnetstorm')">Magnet Storm</button>
+            <button id="btn-phantom" class="btn-mode" onclick="selectMode('phantom')">Phantom</button>
+            <button id="btn-laststand" class="btn-mode" onclick="selectMode('laststand')">Last Stand</button>
         </div>
         <div id="mode-desc" style="font-size: 13px; color: #888; margin-top: 15px; font-style: italic; min-height: 18px;">Survive as long as possible.</div>
         <button onclick="closeModePopup()" style="margin-top: 15px; border-color: #fff;">Confirm</button>
@@ -643,7 +663,27 @@
             rewind: { label: "Rewind", desc: "Press Space to go back 3 seconds.", hint: "Space/Click to Rewind Time" },
             growth: { label: "Growth", desc: "Enemies grow larger constantly. Kill them fast!", hint: "Don't get squeezed" },
             vortex: { label: "Vortex", desc: "A chaotic vortex sucks everything in.", hint: "Avoid the singularity" },
-            meteor: { label: "Meteor", desc: "Watch out for falling meteors!", hint: "Avoid the red circles" }
+            meteor: { label: "Meteor", desc: "Watch out for falling meteors!", hint: "Avoid the red circles" },
+            assassin: { label: "Assassin", desc: "Enemies are tough, but every shot hits hard.", hint: "Click/Space to fire" },
+            berserker: { label: "Berserker", desc: "Your speed rises as the run continues.", hint: "WASD to get faster" },
+            chaos: { label: "Chaos", desc: "Enemies move unpredictably in random directions.", hint: "Nothing follows the rules" },
+            hunter: { label: "Hunter", desc: "Your weapon automatically hunts the nearest enemy.", hint: "Auto-targeting" },
+            nova: { label: "Nova", desc: "Release a massive blast that clears enemies around you.", hint: "Space/Click for Nova" },
+            pulse: { label: "Pulse", desc: "A shockwave automatically destroys nearby enemies.", hint: "Stay mobile" },
+            phase: { label: "Phase", desc: "You periodically become intangible.", hint: "Time your movement" },
+            mirror: { label: "Mirror", desc: "Horizontal movement is reversed.", hint: "Left becomes Right" },
+            glass: { label: "Glass", desc: "You are tiny, but enemies are extremely dangerous.", hint: "One mistake can end it" },
+            giant: { label: "Giant", desc: "You are huge and slow, making every dodge harder.", hint: "WASD • Heavy movement" },
+            frenzy: { label: "Frenzy", desc: "Enemies spawn much faster, creating an overwhelming rush.", hint: "Survive the swarm" },
+            snare: { label: "Snare", desc: "Enemies near you are heavily slowed.", hint: "Keep enemies close" },
+            timewarp: { label: "Timewarp", desc: "Enemies move at a fraction of their normal speed.", hint: "Everything feels slower" },
+            bouncer: { label: "Bouncer", desc: "Enemies bounce around the arena instead of chasing you.", hint: "Dodge the ricochets" },
+            pacifist: { label: "Pacifist", desc: "You cannot rely on attacks. Survive without killing.", hint: "WASD only" },
+            surge: { label: "Surge", desc: "Every few seconds you get a burst of speed.", hint: "Use the speed bursts" },
+            rage: { label: "Rage", desc: "Each enemy you kill makes you faster.", hint: "Kill to build speed" },
+            magnetstorm: { label: "Magnet Storm", desc: "Orbs constantly appear and fly toward you.", hint: "Collect everything" },
+            phantom: { label: "Phantom", desc: "Enemies randomly vanish and reappear around the arena.", hint: "Expect sudden attacks" },
+            laststand: { label: "Last Stand", desc: "The arena starts calm, then becomes brutally fast.", hint: "Hold on as long as possible" }
         };
 
         // Entities
@@ -678,7 +718,10 @@
             chargeTimer: 0,
             isStomping: false, // For Stomp
             stompTimer: 0,
-            history: [] // For Rewind
+            history: [], // For Rewind
+            phaseTimer: 0,
+            surgeTimer: 0,
+            rageBonus: 0
         };
 
         const defendBase = { x: 0, y: 0, radius: 30, hp: 100, maxHp: 100 };
@@ -838,7 +881,8 @@
 
         function handleAbility() {
             // Updated to ensure weapon enabled modes can shoot
-            if (['blaster', 'pvp', 'necro', 'splitter', 'volatile', 'trail', 'growth', 'meteor', 'vortex'].includes(selectedMode)) spawnBullet();
+            if (['blaster', 'pvp', 'necro', 'splitter', 'volatile', 'trail', 'growth', 'meteor', 'vortex', 'assassin'].includes(selectedMode)) spawnBullet();
+            if (selectedMode === 'nova') triggerNova();
             if (selectedMode === 'chameleon') toggleChameleonColor();
             if (selectedMode === 'bomber') dropBomb();
             if (selectedMode === 'freeze') triggerFreeze();
@@ -853,6 +897,17 @@
             if (selectedMode === 'swap') triggerSwap();
             if (selectedMode === 'stomp') triggerStomp();
             if (selectedMode === 'rewind') triggerRewind();
+        }
+
+        function triggerNova() {
+            if (player.abilityCooldown > 0) return;
+            const px = player.x + player.size/2, py = player.y + player.size/2;
+            createExplosion(px, py, '#ffffff', 35);
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                if (Math.hypot(e.x + e.size/2 - px, e.y + e.size/2 - py) < 220) killEnemy(i);
+            }
+            player.abilityCooldown = 180;
         }
 
         // ... (Ability functions) ...
@@ -888,7 +943,7 @@
 
         joystickZone.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            if ((['blaster','chameleon','bomber','freeze','blink','decoy','boxer','pvp','dash','sentry','builder','sniper','charge','necro','splitter','volatile','swap','stomp','rewind'].includes(selectedMode)) && e.changedTouches.length > 0) {
+            if ((['blaster','chameleon','bomber','freeze','blink','decoy','boxer','pvp','dash','sentry','builder','sniper','charge','necro','splitter','volatile','swap','stomp','rewind','nova','assassin','hunter'].includes(selectedMode)) && e.changedTouches.length > 0) {
                  const t = e.changedTouches[0];
                  if (t.clientY < window.innerHeight - 150) {
                      mouse.x = t.clientX;
@@ -988,7 +1043,7 @@
         }
 
         function addCheatScore() {
-            if (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'turret', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor'].includes(selectedMode)) {
+            if (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'turret', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) {
                startTime -= 1000 * 60; 
             } else {
                currentScore += 1000;
@@ -1091,6 +1146,7 @@
             
             enemies.splice(index, 1);
             currentScore++;
+            if (selectedMode === 'rage') player.rageBonus = Math.min(20, player.rageBonus + 1);
             if (selectedMode === 'vampire') player.energy = Math.min(100, player.energy + 20);
             
             if (selectedMode === 'volatile') {
@@ -1210,7 +1266,7 @@
             const elapsed = (now - startTime - totalPausedTime) / 1000;
             
             // Score Display
-            if (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'turret', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor'].includes(selectedMode)) {
+            if (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'turret', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) {
                 scoreEl.textContent = elapsed.toFixed(1) + "s";
             } else {
                 scoreEl.textContent = currentScore;
@@ -1401,16 +1457,18 @@
             if (selectedMode === 'blaster') adjustedSpawnRate = Math.floor(adjustedSpawnRate * 0.7);
             if (selectedMode === 'minefield') adjustedSpawnRate = 30; 
             if (selectedMode === 'swarm') adjustedSpawnRate = Math.max(5, Math.floor(adjustedSpawnRate * 0.2)); 
-            if (['chameleon','bomber','freeze','orbit','laser','titan','twin','blink','decoy','vampire','boxer','turret','pvp','volatile','splitter','trail','dash','sentry','builder','sniper','charge','necro','pinball','swap','graze','stomp','rewind','growth','vortex','meteor'].includes(selectedMode)) adjustedSpawnRate = Math.floor(adjustedSpawnRate * 0.85);
+            if (['chameleon','bomber','freeze','orbit','laser','titan','twin','blink','decoy','vampire','boxer','turret','pvp','volatile','splitter','trail','dash','sentry','builder','sniper','charge','necro','pinball','swap','graze','stomp','rewind','growth','vortex','meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) adjustedSpawnRate = Math.floor(adjustedSpawnRate * 0.85);
             if (selectedMode === 'gravity') adjustedSpawnRate = Math.floor(adjustedSpawnRate * 1.2); 
             if (selectedMode === 'pvp') adjustedSpawnRate = 1000;
             if (selectedMode === 'speedster') adjustedSpawnRate = Math.max(5, Math.floor(adjustedSpawnRate * 0.5));
+            if (selectedMode === 'frenzy') adjustedSpawnRate = Math.max(3, Math.floor(adjustedSpawnRate * 0.3));
+            if (selectedMode === 'laststand') adjustedSpawnRate = Math.max(4, Math.floor(adjustedSpawnRate * 0.55));
 
             if (frameCount % Math.max(5, adjustedSpawnRate) === 0) {
                 spawnEnemy();
             }
 
-            if ((['collector','snake','eater','titan','vampire','magnet'].includes(selectedMode)) && orbs.length === 0) {
+            if ((['collector','snake','eater','titan','vampire','magnet','magnetstorm'].includes(selectedMode)) && orbs.length === 0) {
                 spawnOrb();
             }
 
@@ -1422,8 +1480,13 @@
                 
                 let moveSpeed = player.speed;
                 if (selectedMode === 'speedster') moveSpeed = 10;
-                if (selectedMode === 'slowmo') moveSpeed = 3; 
+                if (selectedMode === 'slowmo') moveSpeed = 3;
                 if (selectedMode === 'turret') moveSpeed = 2.5;
+                if (selectedMode === 'berserker') moveSpeed = Math.min(12, 5 + elapsed * 0.08);
+                if (selectedMode === 'giant') moveSpeed = 3;
+                if (selectedMode === 'glass') moveSpeed = 6;
+                if (selectedMode === 'rage') moveSpeed = Math.min(11, 5 + player.rageBonus * 0.35);
+                if (selectedMode === 'surge' && player.surgeTimer > 0) moveSpeed = 13;
 
                 let up = keys.w || keys.ArrowUp || keys.i;
                 let down = keys.s || keys.ArrowDown || keys.k;
@@ -1468,6 +1531,20 @@
                         player.dy *= 0.7071;
                     }
                 }
+            }
+
+            if (selectedMode === 'mirror') player.dx *= -1;
+
+            if (selectedMode === 'surge') {
+                player.surgeTimer--;
+                if (player.surgeTimer <= 0 && frameCount % 240 === 0) {
+                    player.surgeTimer = 45;
+                    createExplosion(player.x + player.size/2, player.y + player.size/2, '#ffff00', 10);
+                }
+            }
+            if (selectedMode === 'phase') {
+                player.phaseTimer++;
+                if (player.phaseTimer >= 180) player.phaseTimer = 0;
             }
 
             // Gravity Pull (Center)
@@ -1554,6 +1631,17 @@
                 }
             }
 
+            // New mode effects
+            if (selectedMode === 'hunter' && frameCount % 12 === 0) spawnBullet(true);
+            if (selectedMode === 'pulse' && frameCount % 150 === 0) {
+                const px = player.x + player.size/2, py = player.y + player.size/2;
+                createExplosion(px, py, '#00ffff', 18);
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const e = enemies[i];
+                    if (Math.hypot(e.x + e.size/2 - px, e.y + e.size/2 - py) < 130) killEnemy(i);
+                }
+            }
+
             // Enemies Loop
             for (let i = enemies.length - 1; i >= 0; i--) {
                 let e = enemies[i];
@@ -1579,6 +1667,13 @@
                 
                 if (selectedMode === 'speedster') speedFactor *= 1.5;
                 if (selectedMode === 'slowmo') speedFactor *= 0.5;
+                if (selectedMode === 'timewarp') speedFactor *= 0.3;
+                if (selectedMode === 'pacifist') speedFactor *= 0.65;
+                if (selectedMode === 'laststand') speedFactor *= Math.min(3, 0.8 + elapsed / 20);
+                if (selectedMode === 'snare') {
+                    const near = Math.hypot(e.x + e.size/2 - (player.x + player.size/2), e.y + e.size/2 - (player.y + player.size/2));
+                    if (near < 180) speedFactor *= 0.25;
+                }
 
                 // Repel Force
                 if (selectedMode === 'repel') {
@@ -1619,7 +1714,32 @@
                 }
 
                 // Movement Logic
-                if (selectedMode === 'ricochet') {
+                if (selectedMode === 'chaos' || selectedMode === 'bouncer') {
+                    if (e.vx === 0 && e.vy === 0) {
+                        const a = Math.random() * Math.PI * 2;
+                        e.vx = Math.cos(a) * e.speed;
+                        e.vy = Math.sin(a) * e.speed;
+                    }
+                    if (selectedMode === 'chaos' && frameCount % 45 === 0) {
+                        const a = Math.random() * Math.PI * 2;
+                        e.vx = Math.cos(a) * e.speed;
+                        e.vy = Math.sin(a) * e.speed;
+                    }
+                    e.x += e.vx * speedFactor;
+                    e.y += e.vy * speedFactor;
+                    if (e.x <= 0 || e.x >= canvas.width - e.size) e.vx *= -1;
+                    if (e.y <= 0 || e.y >= canvas.height - e.size) e.vy *= -1;
+                } else if (selectedMode === 'phantom') {
+                    e.teleportTimer--;
+                    if (e.teleportTimer <= 0) {
+                        e.x = Math.random() * (canvas.width - e.size);
+                        e.y = Math.random() * (canvas.height - e.size);
+                        e.teleportTimer = Math.random() * 100 + 60;
+                    }
+                    const a = Math.atan2((player.y + player.size/2) - (e.y + e.size/2), (player.x + player.size/2) - (e.x + e.size/2));
+                    e.x += Math.cos(a) * e.speed * speedFactor;
+                    e.y += Math.sin(a) * e.speed * speedFactor;
+                } else if (selectedMode === 'ricochet') {
                     e.x += e.vx * speedFactor;
                     e.y += e.vy * speedFactor;
                     const inBoundsX = e.x > 0 && e.x < canvas.width - e.size;
@@ -1874,7 +1994,7 @@
                 for (let h of hazards) {
                     const dist = Math.sqrt((h.x - (player.x + player.size/2))**2 + (h.y - (player.y + player.size/2))**2);
                     if (dist < h.radius + player.size/2) {
-                        if (!godMode && !player.isDashing && !player.isStomping) gameOver();
+                        if (!godMode && !player.isDashing && !player.isStomping && !(selectedMode === 'phase' && player.phaseTimer > 90)) gameOver();
                     }
                 }
             }
@@ -1888,7 +2008,7 @@
                     else {
                         const dist = Math.sqrt((t.x - player.x)**2 + (t.y - player.y)**2);
                         if (dist < t.size/2 + player.size/2) {
-                            if (!godMode && !player.isDashing && !player.isStomping) gameOver();
+                            if (!godMode && !player.isDashing && !player.isStomping && !(selectedMode === 'phase' && player.phaseTimer > 90)) gameOver();
                         }
                     }
                 }
@@ -1900,7 +2020,7 @@
                     let orb = orbs[i];
                     orb.pulse += 0.1; 
                     
-                    if (selectedMode === 'magnet') {
+                    if (selectedMode === 'magnet' || selectedMode === 'magnetstorm') {
                         const dist = Math.sqrt((orb.x - player.x)**2 + (orb.y - player.y)**2);
                         if (dist < 200) {
                             orb.x += (player.x - orb.x) * 0.05;
@@ -2511,7 +2631,7 @@
             let resultText = "";
             let scoreValue = 0;
 
-            if (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'turret', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor'].includes(selectedMode)) {
+            if (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'turret', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) {
                 const now = Date.now();
                 const elapsed = ((now - startTime - totalPausedTime) / 1000).toFixed(1);
                 scoreValue = parseFloat(elapsed);
@@ -2527,7 +2647,7 @@
             
             if (scoreValue > parseFloat(currentHigh)) {
                 localStorage.setItem(storageKey, scoreValue);
-                const unit = (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor'].includes(selectedMode)) ? 's' : '';
+                const unit = (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) ? 's' : '';
                 highScoreEl.innerText = `Best (${modes[selectedMode].label}/${difficulties[selectedDifficulty].label}): ${scoreValue}${unit}`;
             }
 
@@ -2586,14 +2706,19 @@
             player.x = canvas.width / 2 - player.size/2;
             player.y = canvas.height / 2 - player.size/2;
             player.tail = [];
-            player.size = 20; 
+            player.size = 20;
+            if (selectedMode === 'glass') player.size = 11;
+            if (selectedMode === 'giant') player.size = 42;
             player.velX = 0;
             player.velY = 0;
             player.isDashing = false;
             player.isChargingAttack = false;
             player.isStomping = false;
             player.history = [];
-            
+            player.phaseTimer = 0;
+            player.surgeTimer = 0;
+            player.rageBonus = 0;
+
             if (selectedMode === 'eater') player.size = 15; 
             if (selectedMode === 'vampire') player.energy = 100;
             if (selectedMode === 'pvp') {
@@ -2646,7 +2771,7 @@
             
             const storageKey = `redCubeHigh_${selectedMode}_${selectedDifficulty}`;
             const currentHigh = localStorage.getItem(storageKey) || 0;
-            const unit = (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor'].includes(selectedMode)) ? 's' : '';
+            const unit = (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) ? 's' : '';
             highScoreEl.innerText = `Best (${modes[selectedMode].label}/${difficulties[selectedDifficulty].label}): ${currentHigh}${unit}`;
             
             loop();
