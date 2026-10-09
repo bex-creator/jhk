@@ -81,6 +81,37 @@
             overflow-y: auto;
         }
 
+        .btn-story-launch {
+            width: 100%;
+            margin-top: 10px;
+            border-color: #ffd166;
+            color: #ffd166;
+            background: linear-gradient(135deg, rgba(135, 24, 42, .38), rgba(255, 150, 45, .12));
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+        .story-chapter-card {
+            text-align: left;
+            padding: 10px 12px;
+            margin: 8px 0;
+            border: 1px solid #34343b;
+            border-radius: 8px;
+            background: rgba(255,255,255,.035);
+        }
+        .story-chapter-card.current { border-color: #ffd166; background: rgba(255,209,102,.09); }
+        .story-chapter-card.completed { border-color: #36d990; opacity: .86; }
+        .story-chapter-head { display:flex; gap:10px; align-items:center; justify-content:space-between; font-weight:700; font-size:13px; }
+        .story-chapter-status { color:#aaa; font-size:10px; letter-spacing:.7px; white-space:nowrap; }
+        .story-chapter-card.current .story-chapter-status { color:#ffd166; }
+        .story-chapter-card.completed .story-chapter-status { color:#36d990; }
+        .story-chapter-card p { margin:6px 0 0; color:#aaa; font-size:12px; line-height:1.4; }
+        #storyMenu { width: min(540px, 95vw); min-width: 0; border-color:#ffd166; }
+        #storyMenu h2 { color:#ffd166; margin-top:0; }
+        #storyChapterList { margin:12px 0; }
+        #storyProgressBar { height:7px; border-radius:20px; background:#27272c; overflow:hidden; margin:8px 0 12px; }
+        #storyProgressFill { height:100%; width:0%; background:linear-gradient(90deg,#ff435d,#ffd166); transition:width .25s ease; }
+        @media (max-width: 440px) { #storyMenu { padding:14px; } .story-chapter-head {font-size:12px;} }
+
         #startMenu h1 {
             color: #4488ff;
             font-size: 28px;
@@ -573,13 +604,28 @@
         </div>
 
         <button class="btn-play" onclick="startGame()">PLAY</button>
+        <button class="btn-story-launch" onclick="openStoryMenu()">✦ STORY CAMPAIGN</button>
+    </div>
+
+    <!-- Story Campaign -->
+    <div id="storyMenu" class="overlay-screen" style="z-index: 30;">
+        <h2>THE FRACTURE PROTOCOL</h2>
+        <p style="color:#c7c7cf;font-size:13px;line-height:1.55;margin:0 0 10px;">
+            The red cubes were once guardians of the Core. Something inside the network has turned them hostile. Recover the lost energy, cross the broken arenas, and reach the source before the whole world falls apart.
+        </p>
+        <div id="storyProgressText" style="color:#ffd166;font-size:12px;font-weight:700;letter-spacing:.6px;">0 / 6 CHAPTERS COMPLETE</div>
+        <div id="storyProgressBar"><div id="storyProgressFill"></div></div>
+        <div id="storyChapterList"></div>
+        <button id="storyStartButton" onclick="startStoryCampaign()" style="border-color:#ffd166;color:#ffd166;width:100%;font-weight:800;">BEGIN STORY</button>
+        <button onclick="closeStoryMenu()" style="width:100%;margin-top:8px;border-color:#777;color:#ccc;">BACK</button>
     </div>
 
     <!-- Game Over Screen -->
     <div id="gameOverScreen" class="overlay-screen">
         <h2 id="gameOverTitle" style="color: #ff4444; margin-top:0;">YOU DIED</h2>
         <p style="color: #ddd; font-size: 18px; margin: 10px 0;">Score: <span id="finalScore" style="color:white; font-weight:bold;">0</span></p>
-        <button class="btn-restart" onclick="restartGame()">Try Again</button>
+        <button id="btnRetry" class="btn-restart" onclick="restartGame()">Try Again</button>
+        <button id="storyContinueBtn" onclick="continueStoryCampaign()" style="display:none;border-color:#ffd166;color:#ffd166;">Continue Story →</button>
         <button class="btn-menu" onclick="showMainMenu()">Main Menu</button>
     </div>
 
@@ -751,6 +797,22 @@
             medium: { speedMod: 0.85, spawnMod: 1.4, label: "Medium" },
             hard: { speedMod: 1.3, spawnMod: 0.6, label: "Hard" } 
         };
+
+        const STORY_PROGRESS_KEY = 'redCubeStoryProgress_v1';
+        const storyMissions = [
+            { title: 'A Signal in the Dark', mode: 'survival', goal: 'survive', target: 18, objective: 'Survive for 18 seconds.', intro: 'A weak signal is coming from the old arena. Stay alive long enough for the Core to identify you.', recap: 'The Core recognizes your signal. A red tide is moving toward the transmission tower.', winText: 'Signal acquired. The Core has marked the next safe route.' },
+            { title: 'The Red Tide', mode: 'swarm', goal: 'survive', target: 22, objective: 'Survive the swarm for 22 seconds.', intro: 'The signal has awakened a swarm of corrupted cubes. Keep moving and create gaps before they surround you.', recap: 'The swarm collapses, revealing a cluster of energy cores in the wreckage.', winText: 'The swarm is broken. You found a trace of the stolen energy.' },
+            { title: 'Recover the Cores', mode: 'collector', goal: 'orbs', target: 6, objective: 'Collect 6 green energy cores.', intro: 'The Core cannot open the next gate without energy. Collect six green cores while avoiding the guards.', recap: 'The gate unlocks. Its security grid is already failing and the lights begin to stutter.', winText: 'Energy restored. The security gate is open.' },
+            { title: 'Blackout Protocol', mode: 'blackout', goal: 'survive', target: 24, objective: 'Survive the blackout for 24 seconds.', intro: 'The hostile network cuts the lights. Follow enemy movement and memorise the arena while visibility flickers.', recap: 'You make it through the dark. The floor ahead is fractured and glowing.', winText: 'Blackout survived. You are one arena away from the source.' },
+            { title: 'Faultline', mode: 'floorlava', goal: 'survive', target: 28, objective: 'Survive the fractured floor for 28 seconds.', intro: 'The Core chamber is surrounded by unstable terrain. Watch the warnings and never stay still for long.', recap: 'The fracture falls quiet. A colossal signal is pulsing from the heart of the network.', winText: 'The faultline is crossed. The Crimson Overlord has found you.' },
+            { title: 'The Crimson Overlord', mode: 'bossfight', goal: 'boss', target: 0, objective: 'Defeat the Crimson Overlord.', intro: 'Three combat phases stand between you and the Core. Watch for attack warnings, dash through danger, and strike the cyan core when it opens.', recap: 'Campaign complete.', winText: 'The Crimson Overlord is defeated. The Core is free, and the red cubes fall silent.' }
+        ];
+        let storyActive = false;
+        let storyChapterIndex = 0;
+        let storyOrbCount = 0;
+        let storyCompletionTriggered = false;
+        let storyProgress = 0;
+        try { storyProgress = Math.max(0, Math.min(storyMissions.length, parseInt(localStorage.getItem(STORY_PROGRESS_KEY) || '0', 10) || 0)); } catch (_) { storyProgress = 0; }
 
         const modes = {
             survival: { label: "Survival", desc: "Survive as long as possible. Enemies chase you.", hint: "WASD to Move • Click to Dash" },
@@ -1247,7 +1309,134 @@
         function openBackgroundPopup() { startMenu.style.display = 'none'; backgroundSelectPopup.style.display = 'block'; }
         function closeBackgroundPopup() { backgroundSelectPopup.style.display = 'none'; startMenu.style.display = 'block'; }
 
-        // --- Menu Logic ---
+        // --- Story Campaign Logic ---
+        function saveStoryProgress() {
+            try { localStorage.setItem(STORY_PROGRESS_KEY, String(storyProgress)); } catch (_) {}
+        }
+
+        function renderStoryMenu() {
+            const list = document.getElementById('storyChapterList');
+            const progressLabel = document.getElementById('storyProgressText');
+            const fill = document.getElementById('storyProgressFill');
+            const start = document.getElementById('storyStartButton');
+            if (!list || !progressLabel || !fill || !start) return;
+            const completed = Math.min(storyProgress, storyMissions.length);
+            progressLabel.innerText = completed >= storyMissions.length
+                ? 'CAMPAIGN COMPLETE • ALL 6 CHAPTERS CLEARED'
+                : `${completed} / ${storyMissions.length} CHAPTERS COMPLETE`;
+            fill.style.width = `${(completed / storyMissions.length) * 100}%`;
+            list.innerHTML = storyMissions.map((mission, i) => {
+                const done = i < completed;
+                const current = i === completed && completed < storyMissions.length;
+                const status = done ? 'CLEARED' : current ? 'CURRENT MISSION' : 'LOCKED';
+                const detail = done ? mission.recap : current ? `OBJECTIVE: ${mission.objective}` : 'Clear the previous chapter to reveal this mission.';
+                return `<div class="story-chapter-card ${done ? 'completed' : current ? 'current' : ''}"><div class="story-chapter-head"><span>${String(i + 1).padStart(2, '0')} · ${mission.title}</span><span class="story-chapter-status">${status}</span></div><p>${detail}</p></div>`;
+            }).join('');
+            start.innerText = completed >= storyMissions.length ? 'REPLAY STORY' : completed > 0 ? 'CONTINUE STORY' : 'BEGIN STORY';
+        }
+
+        function openStoryMenu() {
+            startMenu.style.display = 'none';
+            modeSelectPopup.style.display = 'none';
+            backgroundSelectPopup.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            storyActive = false;
+            renderStoryMenu();
+            document.getElementById('storyMenu').style.display = 'block';
+        }
+
+        function closeStoryMenu() {
+            document.getElementById('storyMenu').style.display = 'none';
+            startMenu.style.display = 'block';
+        }
+
+        function startStoryCampaign() {
+            if (storyProgress >= storyMissions.length) {
+                storyProgress = 0;
+                saveStoryProgress();
+            }
+            storyChapterIndex = storyProgress;
+            storyActive = true;
+            storyOrbCount = 0;
+            storyCompletionTriggered = false;
+            launchStoryChapter();
+        }
+
+        function launchStoryChapter() {
+            if (storyChapterIndex >= storyMissions.length) {
+                storyActive = false;
+                showMainMenu();
+                openStoryMenu();
+                renderStoryMenu();
+                return;
+            }
+            const mission = storyMissions[storyChapterIndex];
+            selectedMode = mission.mode;
+            const modeButton = document.getElementById('btn-' + selectedMode);
+            if (modeButton) {
+                document.querySelectorAll('#modeSelectPopup .btn-mode').forEach(b => b.classList.remove('selected'));
+                modeButton.classList.add('selected');
+            }
+            currentModeDisplay.innerText = `Story ${storyChapterIndex + 1}: ${mission.title}`;
+            controlsHint.innerText = `CHAPTER ${storyChapterIndex + 1} · ${mission.objective} · WASD / Arrows to move`;
+            document.getElementById('storyMenu').style.display = 'none';
+            startMenu.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            startGame();
+        }
+
+        function checkStoryMission(elapsed) {
+            if (!storyActive || storyCompletionTriggered || !isRunning) return;
+            const mission = storyMissions[storyChapterIndex];
+            if (!mission) return;
+            if (mission.goal === 'survive' && elapsed >= mission.target) completeStoryMission();
+            else if (mission.goal === 'orbs' && storyOrbCount >= mission.target) completeStoryMission();
+        }
+
+        function completeStoryMission() {
+            if (!storyActive || storyCompletionTriggered) return;
+            storyCompletionTriggered = true;
+            const mission = storyMissions[storyChapterIndex];
+            storyProgress = Math.max(storyProgress, storyChapterIndex + 1);
+            saveStoryProgress();
+            isRunning = false;
+            isPaused = false;
+            bossFightState.active = false;
+            const finishedAll = storyProgress >= storyMissions.length;
+            const title = document.getElementById('gameOverTitle');
+            if (title) {
+                title.innerText = finishedAll ? 'THE FRACTURE IS SEALED' : `CHAPTER ${storyChapterIndex + 1} COMPLETE`;
+                title.style.color = '#ffd166';
+            }
+            const next = storyMissions[storyProgress];
+            finalScoreEl.innerText = mission.winText + (next ? ` Next: ${next.title} — ${next.intro}` : ' You have restored the Core and completed the campaign.');
+            document.getElementById('btnRetry').style.display = 'none';
+            const continueButton = document.getElementById('storyContinueBtn');
+            continueButton.style.display = 'block';
+            continueButton.innerText = finishedAll ? 'FINISH CAMPAIGN' : `CONTINUE → ${next.title}`;
+            gameOverScreen.style.display = 'block';
+            renderStoryMenu();
+            draw();
+        }
+
+        function continueStoryCampaign() {
+            document.getElementById('storyContinueBtn').style.display = 'none';
+            document.getElementById('btnRetry').style.display = 'block';
+            if (storyProgress >= storyMissions.length) {
+                storyActive = false;
+                showMainMenu();
+                openStoryMenu();
+                renderStoryMenu();
+                return;
+            }
+            storyChapterIndex = storyProgress;
+            storyOrbCount = 0;
+            storyCompletionTriggered = false;
+            storyActive = true;
+            launchStoryChapter();
+        }
+
+        // --- Mode Logic ---
         function selectMode(mode) {
             if (mode === 'bossfight' && !isBossUnlocked()) { updateBossUnlockUI(); return; }
             selectedMode = mode;
@@ -1583,13 +1772,21 @@
 
         function bossVictory(){
             if(!bossFightState.active)return;
-            bossFightState.active=false;bossFightState.defeated=true;isRunning=false;
+            bossFightState.active=false;
+            bossFightState.defeated=true;
             currentScore=bossFightState.maxHp;
             const cx=bossFightState.x+bossFightState.size/2,cy=bossFightState.y+bossFightState.size/2;
             createExplosion(cx,cy,'#ff4455',180);createExplosion(cx,cy,'#ffd166',100);
+            if (storyActive) {
+                completeStoryMission();
+                return;
+            }
+            isRunning=false;
             finalScoreEl.innerText='CRIMSON OVERLORD DEFEATED!';
             const title=document.getElementById('gameOverTitle');
             if(title){title.innerText='BOSS DEFEATED!';title.style.color='#ffd166';}
+            document.getElementById('btnRetry').style.display='block';
+            document.getElementById('storyContinueBtn').style.display='none';
             gameOverScreen.style.display='block';draw();
         }
 
@@ -2827,6 +3024,7 @@
                         player.y < orb.y + orb.size && player.y + player.size > orb.y) {
                         orbs.splice(i, 1);
                         currentScore++;
+                        if (storyActive && storyMissions[storyChapterIndex] && storyMissions[storyChapterIndex].goal === 'orbs') storyOrbCount++;
                         createExplosion(orb.x + orb.size/2, orb.y + orb.size/2, orb.color);
                         if (selectedMode === 'eater') player.size += 2; 
                         if (selectedMode === 'titan') player.size = Math.max(20, player.size - 5); 
@@ -2856,6 +3054,7 @@
             }
 
             frameCount++;
+            if (storyActive) checkStoryMission(elapsed);
         }
 
         function drawBackground() {
@@ -3453,6 +3652,20 @@
                 ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(x-4,y-4,barW+8,18);ctx.fillStyle='#222';ctx.fillRect(x,y,barW,10);ctx.fillStyle='#4488ff';ctx.fillRect(x,y,barW*Math.max(0,player.hp/player.maxHp),10);ctx.strokeStyle='#fff';ctx.strokeRect(x,y,barW,10);ctx.fillStyle='#fff';ctx.font='11px Segoe UI';ctx.textAlign='left';ctx.fillText(`YOU ${Math.max(0,Math.ceil(player.hp))}/${player.maxHp}`,x,y-8);
             }
 
+            if (storyActive && selectedMode !== 'bossfight') {
+                const mission = storyMissions[storyChapterIndex];
+                const elapsedStory = startTime ? Math.max(0, (Date.now() - startTime - totalPausedTime) / 1000) : 0;
+                const hudW = Math.min(360, canvas.width - 28);
+                ctx.fillStyle = 'rgba(5,7,12,.78)';
+                ctx.fillRect(14, 14, hudW, 52);
+                ctx.strokeStyle = 'rgba(255,209,102,.7)'; ctx.lineWidth = 1; ctx.strokeRect(14,14,hudW,52);
+                ctx.fillStyle = '#ffd166'; ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'left';
+                ctx.fillText(`CHAPTER ${storyChapterIndex + 1} · ${mission.title}`, 24, 33);
+                ctx.fillStyle = '#ffffff'; ctx.font = '11px Segoe UI';
+                const goalText = mission.goal === 'orbs' ? `Energy cores: ${storyOrbCount}/${mission.target}` : `Survive: ${Math.max(0, mission.target - elapsedStory).toFixed(1)}s remaining`;
+                ctx.fillText(goalText, 24, 51);
+            }
+
             if (isPaused) {
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
                 ctx.fillRect(0,0,canvas.width, canvas.height);
@@ -3515,10 +3728,26 @@
                 highScoreEl.innerText = `Best (${modes[selectedMode].label}/${difficulties[selectedDifficulty].label}): ${scoreValue}${unit}`;
             }
 
+            if (storyActive && !storyCompletionTriggered) {
+                const mission = storyMissions[storyChapterIndex];
+                const title = document.getElementById('gameOverTitle');
+                if (title) { title.innerText = 'MISSION FAILED'; title.style.color = '#ff6464'; }
+                finalScoreEl.innerText = `Chapter ${storyChapterIndex + 1}: ${mission.title}. ${mission.objective} Your progress is saved; retry this chapter to continue the campaign.`;
+                document.getElementById('btnRetry').style.display = 'block';
+                document.getElementById('storyContinueBtn').style.display = 'none';
+            } else {
+                document.getElementById('btnRetry').style.display = 'block';
+                document.getElementById('storyContinueBtn').style.display = 'none';
+            }
             gameOverScreen.style.display = 'block';
         }
 
         function showMainMenu() {
+            storyActive = false;
+            storyCompletionTriggered = false;
+            document.getElementById('storyMenu').style.display = 'none';
+            document.getElementById('storyContinueBtn').style.display = 'none';
+            document.getElementById('btnRetry').style.display = 'block';
             isRunning = false;
             scoreEl.style.display = '';
             highScoreEl.style.display = '';
@@ -3531,6 +3760,10 @@
             gameOverScreen.style.display = 'none';
             startMenu.style.display = 'block';
             gameTitle.style.display = 'none';
+            if (modes[selectedMode]) {
+                currentModeDisplay.innerText = modes[selectedMode].label;
+                controlsHint.innerText = modes[selectedMode].hint;
+            }
             enemies = [];
             particles = [];
             orbs = [];
@@ -3568,13 +3801,15 @@
             startMenu.style.display = 'none';
             gameOverScreen.style.display = 'none';
             gameTitle.style.display = 'block';
-            gameTitle.textContent = selectedMode === 'bossfight' ? 'CRIMSON OVERLORD' : 'Survive';
+            gameTitle.textContent = storyActive ? `CHAPTER ${storyChapterIndex + 1}: ${storyMissions[storyChapterIndex].title}` : (selectedMode === 'bossfight' ? 'CRIMSON OVERLORD' : 'Survive');
             restartGame();
         }
 
         function restartGame() {
             if (animationId != null) cancelAnimationFrame(animationId);
             animationId = null;
+            storyCompletionTriggered = false;
+            storyOrbCount = 0;
             const isBossMode = selectedMode === 'bossfight';
             scoreEl.style.display = isBossMode ? 'none' : '';
             highScoreEl.style.display = isBossMode ? 'none' : '';
@@ -3676,10 +3911,10 @@
             if (gameOverTitle) { gameOverTitle.innerText = 'YOU DIED'; gameOverTitle.style.color = '#ff4444'; }
             isRunning = true;
             if (selectedMode === 'bossfight') {
-                gameTitle.textContent = 'CRIMSON OVERLORD';
+                gameTitle.textContent = storyActive ? `CHAPTER ${storyChapterIndex + 1}: ${storyMissions[storyChapterIndex].title}` : 'CRIMSON OVERLORD';
                 initBossFight();
             } else {
-                gameTitle.textContent = 'Survive';
+                gameTitle.textContent = storyActive ? `CHAPTER ${storyChapterIndex + 1}: ${storyMissions[storyChapterIndex].title}` : 'Survive';
                 player.color = '#4488ff'; player.speed = 5;
             }
             
@@ -3693,6 +3928,7 @@
 
         loadBossProgress();
         updateBossUnlockUI();
+        renderStoryMenu();
 
         const initialKey = `redCubeHigh_survival_medium`;
         const savedHigh = localStorage.getItem(initialKey) || 0;
