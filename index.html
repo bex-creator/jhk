@@ -160,6 +160,21 @@
         
         .btn-mode.selected { background: rgba(68, 136, 255, 0.2); border-color: #4488ff; color: #4488ff; }
 
+        .btn-boss {
+            grid-column: 1 / -1;
+            border-color: #ff3344;
+            color: #ff6677;
+            background: rgba(255, 30, 50, 0.06);
+            font-size: 13px;
+            padding: 11px 6px;
+            letter-spacing: 1px;
+        }
+        .btn-boss.locked { opacity: 0.55; cursor: not-allowed; border-style: dashed; }
+        .btn-boss.unlocked { border-color: #ff3344; color: #fff; background: rgba(255, 30, 50, 0.14); box-shadow: 0 0 18px rgba(255, 30, 50, 0.18); }
+        .btn-boss.unlocked.selected { background: rgba(255, 40, 60, 0.24); border-color: #ff6677; color: #fff; }
+        #bossUnlockStatus { margin-top: 10px; font-size: 12px; color: #888; line-height: 1.4; }
+        #bossUnlockStatus.ready { color: #ff6677; font-weight: bold; }
+
         .btn-play {
             background: #4488ff !important;
             border-color: #4488ff !important;
@@ -371,6 +386,11 @@
                 <span>Add 1000 Score</span>
                 <button onclick="addCheatScore()" style="width: auto; padding: 5px 10px; font-size: 12px; margin: 0;">Execute</button>
             </div>
+            <div class="admin-option">
+                <span>Boss Fight Unlock</span>
+                <button onclick="unlockBossFight()" id="adminBossUnlockBtn" style="width: auto; padding: 5px 10px; font-size: 12px; margin: 0; border-color: #ff3344; color: #ff6677;">Unlock</button>
+            </div>
+            <div id="adminBossProgress" style="color:#888;font-size:12px;margin:0 0 8px 0;text-align:right;">Boss Fight locked</div>
         </div>
         
         <button class="btn-close-admin" onclick="closeAdminPanel()">Close</button>
@@ -465,7 +485,39 @@
             <button id="btn-magnetstorm" class="btn-mode" onclick="selectMode('magnetstorm')">Magnet Storm</button>
             <button id="btn-phantom" class="btn-mode" onclick="selectMode('phantom')">Phantom</button>
             <button id="btn-laststand" class="btn-mode" onclick="selectMode('laststand')">Last Stand</button>
+            <button id="btn-ringlock" class="btn-mode" onclick="selectMode('ringlock')">Ringlock</button>
+            <button id="btn-zigzag" class="btn-mode" onclick="selectMode('zigzag')">Zigzag</button>
+            <button id="btn-patrol" class="btn-mode" onclick="selectMode('patrol')">Patrol</button>
+            <button id="btn-scatter" class="btn-mode" onclick="selectMode('scatter')">Scatter</button>
+            <button id="btn-boomerang" class="btn-mode" onclick="selectMode('boomerang')">Boomerang</button>
+            <button id="btn-strobe" class="btn-mode" onclick="selectMode('strobe')">Strobe</button>
+            <button id="btn-blackout" class="btn-mode" onclick="selectMode('blackout')">Blackout</button>
+            <button id="btn-lightning" class="btn-mode" onclick="selectMode('lightning')">Lightning</button>
+            <button id="btn-crossfire" class="btn-mode" onclick="selectMode('crossfire')">Crossfire</button>
+            <button id="btn-rainfire" class="btn-mode" onclick="selectMode('rainfire')">Rainfire</button>
+            <button id="btn-shockwave" class="btn-mode" onclick="selectMode('shockwave')">Shockwave</button>
+            <button id="btn-nomadsafe" class="btn-mode" onclick="selectMode('nomadsafe')">Nomad Safezone</button>
+            <button id="btn-conveyor" class="btn-mode" onclick="selectMode('conveyor')">Conveyor</button>
+            <button id="btn-cyclone" class="btn-mode" onclick="selectMode('cyclone')">Cyclone</button>
+            <button id="btn-fourwinds" class="btn-mode" onclick="selectMode('fourwinds')">Four Winds</button>
+            <button id="btn-floorlava" class="btn-mode" onclick="selectMode('floorlava')">Floor Lava</button>
+            <button id="btn-hotzone" class="btn-mode" onclick="selectMode('hotzone')">Hot Zone</button>
+            <button id="btn-crush" class="btn-mode" onclick="selectMode('crush')">Crush</button>
+            <button id="btn-movingwalls" class="btn-mode" onclick="selectMode('movingwalls')">Moving Walls</button>
+            <button id="btn-ambush" class="btn-mode" onclick="selectMode('ambush')">Ambush</button>
+            <button id="btn-bossrush" class="btn-mode" onclick="selectMode('bossrush')">Boss Rush</button>
+            <button id="btn-bodyguard" class="btn-mode" onclick="selectMode('bodyguard')">Bodyguard</button>
+            <button id="btn-decoyrain" class="btn-mode" onclick="selectMode('decoyrain')">Decoy Rain</button>
+            <button id="btn-enemymagnet" class="btn-mode" onclick="selectMode('enemymagnet')">Enemy Magnet</button>
+            <button id="btn-repulsor" class="btn-mode" onclick="selectMode('repulsor')">Repulsor</button>
+            <button id="btn-heavycorner" class="btn-mode" onclick="selectMode('heavycorner')">Heavy Corner</button>
+            <button id="btn-lowgravity" class="btn-mode" onclick="selectMode('lowgravity')">Low Gravity</button>
+            <button id="btn-countdown" class="btn-mode" onclick="selectMode('countdown')">Countdown</button>
+            <button id="btn-suddenrush" class="btn-mode" onclick="selectMode('suddenrush')">Sudden Rush</button>
+            <button id="btn-doppelganger" class="btn-mode" onclick="selectMode('doppelganger')">Doppelganger</button>
+            <button id="btn-bossfight" class="btn-mode btn-boss locked" onclick="selectMode('bossfight')" disabled>🔒 BOSS FIGHT — LOCKED</button>
         </div>
+        <div id="bossUnlockStatus">Boss Fight is locked. Play 20 different normal modes for the unlock.</div>
         <div id="mode-desc" style="font-size: 13px; color: #888; margin-top: 15px; font-style: italic; min-height: 18px;">Survive as long as possible.</div>
         <button onclick="closeModePopup()" style="margin-top: 15px; border-color: #fff;">Confirm</button>
     </div>
@@ -525,7 +577,7 @@
 
     <!-- Game Over Screen -->
     <div id="gameOverScreen" class="overlay-screen">
-        <h2 style="color: #ff4444; margin-top:0;">YOU DIED</h2>
+        <h2 id="gameOverTitle" style="color: #ff4444; margin-top:0;">YOU DIED</h2>
         <p style="color: #ddd; font-size: 18px; margin: 10px 0;">Score: <span id="finalScore" style="color:white; font-weight:bold;">0</span></p>
         <button class="btn-restart" onclick="restartGame()">Try Again</button>
         <button class="btn-menu" onclick="showMainMenu()">Main Menu</button>
@@ -564,6 +616,70 @@
         let frameCount = 0;
         let difficultyMultiplier = 1;
         let currentScore = 0; 
+
+        // Boss Fight + unlock state
+        const BOSS_UNLOCK_KEY = 'redCubeBossFightUnlocked_v1';
+        const BOSS_PLAYED_KEY = 'redCubeNormalModesPlayed_v1';
+        const BOSS_MODE_REQUIREMENT = 20;
+        const BOSS_EXCLUDED_FROM_PROGRESS = new Set(['bossfight', 'pvp', 'bossrush', 'bodyguard']);
+        let bossPlayedModes = new Set();
+        let bossFightState = {
+            active:false, x:0, y:0, size:118, hp:0, maxHp:0, phase:1,
+            attackTimer:0, dashTimer:0, laserTimer:0, shockTimer:0, minionTimer:0,
+            hitFlash:0, contactCooldown:0, enrageFlash:0, vx:0, vy:0, laserAngle:0, defeated:false
+        };
+        let bossProjectiles = [];
+        let bossLasers = [];
+        let bossRings = [];
+
+        function loadBossProgress() {
+            try {
+                const raw = JSON.parse(localStorage.getItem(BOSS_PLAYED_KEY) || '[]');
+                bossPlayedModes = new Set(Array.isArray(raw) ? raw.filter(Boolean) : []);
+            } catch (e) {
+                bossPlayedModes = new Set();
+            }
+            if (bossPlayedModes.size >= BOSS_MODE_REQUIREMENT) localStorage.setItem(BOSS_UNLOCK_KEY, '1');
+        }
+
+        function isBossUnlocked() {
+            return localStorage.getItem(BOSS_UNLOCK_KEY) === '1' || bossPlayedModes.size >= BOSS_MODE_REQUIREMENT;
+        }
+
+        function markModePlayedForBoss() {
+            if (selectedMode === 'bossfight' || BOSS_EXCLUDED_FROM_PROGRESS.has(selectedMode)) return;
+            if (bossPlayedModes.has(selectedMode)) return;
+            bossPlayedModes.add(selectedMode);
+            localStorage.setItem(BOSS_PLAYED_KEY, JSON.stringify([...bossPlayedModes]));
+            if (bossPlayedModes.size >= BOSS_MODE_REQUIREMENT) localStorage.setItem(BOSS_UNLOCK_KEY, '1');
+            updateBossUnlockUI();
+        }
+
+        function unlockBossFight() {
+            localStorage.setItem(BOSS_UNLOCK_KEY, '1');
+            updateBossUnlockUI();
+        }
+
+        function updateBossUnlockUI() {
+            const unlocked = isBossUnlocked();
+            const count = Math.min(bossPlayedModes.size, BOSS_MODE_REQUIREMENT);
+            const btn = document.getElementById('btn-bossfight');
+            const status = document.getElementById('bossUnlockStatus');
+            const adminStatus = document.getElementById('adminBossProgress');
+            const adminBtn = document.getElementById('adminBossUnlockBtn');
+            if (btn) {
+                btn.disabled = !unlocked;
+                btn.classList.toggle('locked', !unlocked);
+                btn.classList.toggle('unlocked', unlocked);
+                btn.innerText = unlocked ? '⚔ BOSS FIGHT — UNLOCKED' : `🔒 BOSS FIGHT — ${count}/${BOSS_MODE_REQUIREMENT}`;
+            }
+            if (status) {
+                status.classList.toggle('ready', unlocked);
+                status.innerText = unlocked ? 'Boss Fight unlocked! Face the Crimson Overlord.' : `Boss Fight locked • ${count}/${BOSS_MODE_REQUIREMENT} different normal modes played.`;
+            }
+            if (adminStatus) adminStatus.innerText = unlocked ? 'Boss Fight unlocked' : `Normal modes played: ${count}/${BOSS_MODE_REQUIREMENT}`;
+            if (adminBtn) { adminBtn.innerText = unlocked ? 'Unlocked' : 'Unlock'; adminBtn.disabled = unlocked; }
+        }
         
         // Admin State
         let godMode = false;
@@ -683,8 +799,41 @@
             rage: { label: "Rage", desc: "Each enemy you kill makes you faster.", hint: "Kill to build speed" },
             magnetstorm: { label: "Magnet Storm", desc: "Orbs constantly appear and fly toward you.", hint: "Collect everything" },
             phantom: { label: "Phantom", desc: "Enemies randomly vanish and reappear around the arena.", hint: "Expect sudden attacks" },
-            laststand: { label: "Last Stand", desc: "The arena starts calm, then becomes brutally fast.", hint: "Hold on as long as possible" }
+            laststand: { label: "Last Stand", desc: "The arena starts calm, then becomes brutally fast.", hint: "Hold on as long as possible" },
+            ringlock: { label: "Ringlock", desc: "A safe ring shrinks around the arena. Stay inside it or you lose.", hint: "Stay inside the ring" },
+            zigzag: { label: "Zigzag", desc: "Every red cube weaves side-to-side while chasing you.", hint: "Predict the zigzags" },
+            patrol: { label: "Patrol", desc: "Enemies patrol moving routes instead of simply rushing you.", hint: "Watch their routes" },
+            scatter: { label: "Scatter", desc: "Enemies flee when you get close, then turn and attack again.", hint: "Use their panic to escape" },
+            boomerang: { label: "Boomerang", desc: "Enemies periodically reverse direction, making their attacks unpredictable.", hint: "Watch the turnaround" },
+            strobe: { label: "Strobe", desc: "Your controls periodically scramble for a moment.", hint: "React quickly" },
+            blackout: { label: "Blackout", desc: "The screen goes dark in short bursts.", hint: "Remember where danger is" },
+            lightning: { label: "Lightning", desc: "Lightning strikes random marked locations after a warning.", hint: "Move out of the markers" },
+            crossfire: { label: "Crossfire", desc: "Projectiles enter from the edges and target your position.", hint: "Dodge the incoming fire" },
+            rainfire: { label: "Rainfire", desc: "Slow projectiles rain down from the top of the arena.", hint: "Keep moving sideways" },
+            shockwave: { label: "Shockwave", desc: "Expanding rings sweep across the arena at intervals.", hint: "Slip between the waves" },
+            nomadsafe: { label: "Nomad Safezone", desc: "A safe zone travels around the arena. Follow it.", hint: "Stay in the moving safe zone" },
+            conveyor: { label: "Conveyor", desc: "The entire arena pushes you with a constantly changing current.", hint: "Fight the current" },
+            cyclone: { label: "Cyclone", desc: "A rotating force sweeps everything around the center.", hint: "Counter the spin" },
+            fourwinds: { label: "Four Winds", desc: "Powerful gusts alternate between four directions.", hint: "Adapt to each gust" },
+            floorlava: { label: "Floor Lava", desc: "Dangerous strips appear on the floor and move around.", hint: "Find the clear lane" },
+            hotzone: { label: "Hot Zone", desc: "A dangerous center zone grows when you stay still.", hint: "Never camp" },
+            crush: { label: "Crush", desc: "Moving boundaries slowly squeeze the playable area.", hint: "Move through the shrinking space" },
+            movingwalls: { label: "Moving Walls", desc: "Barriers slide through the arena and block enemy paths.", hint: "Use the barriers" },
+            ambush: { label: "Ambush", desc: "Enemies sometimes appear near you with almost no warning.", hint: "Keep your options open" },
+            bossrush: { label: "Boss Rush", desc: "Only one giant enemy fights at a time, but each boss gets stronger.", hint: "Survive the boss" },
+            bodyguard: { label: "Bodyguard", desc: "A heavy red guardian protects the center while hunters chase you.", hint: "Avoid the guardian" },
+            decoyrain: { label: "Decoy Rain", desc: "Decoys automatically appear around the arena and split enemy attention.", hint: "Use the chaos" },
+            enemymagnet: { label: "Enemy Magnet", desc: "Red cubes pull toward other red cubes, forming dangerous clusters.", hint: "Do not get trapped" },
+            repulsor: { label: "Repulsor", desc: "Enemies push away from each other and fan out around you.", hint: "Watch the gaps" },
+            heavycorner: { label: "Heavy Corner", desc: "A strong force drags you toward a changing corner.", hint: "Push against the pull" },
+            lowgravity: { label: "Low Gravity", desc: "You accelerate slowly and keep drifting after you release the keys.", hint: "Plan your turns" },
+            countdown: { label: "Countdown", desc: "A timer constantly falls. Grab green orbs to add precious seconds.", hint: "Collect orbs before time hits zero" },
+            suddenrush: { label: "Sudden Rush", desc: "Every few seconds all enemies lunge toward your current position.", hint: "Prepare for the lunge" },
+            doppelganger: { label: "Doppelganger", desc: "A dangerous shadow copies your movement across the arena.", hint: "Do not collide with your shadow" },
+            bossfight: { label: "Boss Fight", desc: "Battle the Crimson Overlord through three escalating phases of lasers, volleys, shockwaves, dashes, and reinforcements.", hint: "WASD / Arrows • Click or Space to fire • Dash through attacks" }
         };
+
+        const survivalScoreModes = new Set(Object.keys(modes).filter(m => m !== 'collector' && m !== 'blaster' && m !== 'bossfight'));
 
         // Entities
         const player = {
@@ -740,6 +889,23 @@
         let allies = []; // For Necro
         let vortex = { x: 0, y: 0, vx: 2, vy: 2, radius: 40 }; // For Vortex
         let meteors = []; // For Meteor
+        let lightningStrikes = [];
+        let enemyBullets = [];
+        let shockwaves = [];
+        let lavaZones = [];
+        let movingWalls = [];
+        let countdownTime = 12;
+        let safeZone = { x: 0, y: 0, radius: 180, vx: 1.2, vy: 0.9 };
+        let currentWindX = 0;
+        let currentWindY = 0;
+        let cornerTimer = 0;
+        let cornerX = 1;
+        let cornerY = 1;
+        let blackoutTimer = 0;
+        let strobeTimer = 0;
+        let hotZoneRadius = 45;
+        let crushAmount = 0;
+        let doppel = { x: 0, y: 0, size: 20 };
 
         // Input State
         const keys = {
@@ -881,7 +1047,7 @@
 
         function handleAbility() {
             // Updated to ensure weapon enabled modes can shoot
-            if (['blaster', 'pvp', 'necro', 'splitter', 'volatile', 'trail', 'growth', 'meteor', 'vortex', 'assassin'].includes(selectedMode)) spawnBullet();
+            if (['blaster', 'pvp', 'necro', 'splitter', 'volatile', 'trail', 'growth', 'meteor', 'vortex', 'assassin', 'bossfight'].includes(selectedMode)) spawnBullet();
             if (selectedMode === 'nova') triggerNova();
             if (selectedMode === 'chameleon') toggleChameleonColor();
             if (selectedMode === 'bomber') dropBomb();
@@ -1043,7 +1209,7 @@
         }
 
         function addCheatScore() {
-            if (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'turret', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) {
+            if (survivalScoreModes.has(selectedMode)) {
                startTime -= 1000 * 60; 
             } else {
                currentScore += 1000;
@@ -1060,6 +1226,7 @@
 
         // --- Menu Logic ---
         function selectMode(mode) {
+            if (mode === 'bossfight' && !isBossUnlocked()) { updateBossUnlockUI(); return; }
             selectedMode = mode;
             document.querySelectorAll('#modeSelectPopup .btn-mode').forEach(b => b.classList.remove('selected'));
             document.getElementById('btn-' + mode).classList.add('selected');
@@ -1155,8 +1322,11 @@
         }
 
         function spawnEnemy() {
+            if (selectedMode === 'bossfight') return;
             if (selectedMode === 'snake' && enemies.length >= 2) return;
             if (selectedMode === 'pvp' && enemies.length >= 1) return;
+            if (selectedMode === 'bossrush' && enemies.length >= 1) return;
+            if (selectedMode === 'bodyguard' && enemies.length >= 8) return;
 
             const side = Math.floor(Math.random() * 4);
             let x, y;
@@ -1231,6 +1401,25 @@
                 e.color = '#ffffff'; 
             }
 
+            if (selectedMode === 'patrol') {
+                e.patrolX = 80 + Math.random() * Math.max(1, canvas.width - 160);
+                e.patrolY = 80 + Math.random() * Math.max(1, canvas.height - 160);
+                e.patrolAngle = Math.random() * Math.PI * 2;
+                e.patrolRadius = 60 + Math.random() * 130;
+            }
+            if (selectedMode === 'zigzag') e.zigzagOffset = Math.random() * Math.PI * 2;
+            if (selectedMode === 'boomerang') e.reverseTimer = 80 + Math.random() * 100;
+            if (selectedMode === 'bossrush') {
+                e.size = 55 + Math.min(35, currentScore * 0.25);
+                e.hp = 900 + currentScore * 100;
+                e.maxHp = e.hp;
+                e.speed *= 0.65;
+                e.color = '#990000';
+            }
+            if (selectedMode === 'bodyguard' && enemies.length === 0) {
+                e.type = 'guardian'; e.guardian = true; e.size = 70; e.speed *= 0.4; e.hp = 1200; e.maxHp = 1200; e.color = '#880000';
+            }
+
             enemies.push(e);
         }
 
@@ -1258,18 +1447,157 @@
             }
         }
 
+        function initBossFight() {
+            bossFightState.active = true;
+            bossFightState.x = canvas.width / 2 - bossFightState.size / 2;
+            bossFightState.y = Math.max(80, canvas.height * 0.14);
+            bossFightState.hp = 7200;
+            bossFightState.maxHp = 7200;
+            bossFightState.phase = 1;
+            bossFightState.attackTimer = 70;
+            bossFightState.dashTimer = 180;
+            bossFightState.laserTimer = 260;
+            bossFightState.shockTimer = 145;
+            bossFightState.minionTimer = 300;
+            bossFightState.hitFlash = 0;
+            bossFightState.contactCooldown = 0;
+            bossFightState.enrageFlash = 0;
+            bossFightState.vx = 0;
+            bossFightState.vy = 0;
+            bossFightState.laserAngle = 0;
+            bossFightState.defeated = false;
+            bossProjectiles = [];
+            bossLasers = [];
+            bossRings = [];
+            enemies = [];
+            bullets = [];
+            player.hp = 150;
+            player.maxHp = 150;
+            player.abilityCooldown = 0;
+            createExplosion(bossFightState.x + bossFightState.size / 2, bossFightState.y + bossFightState.size / 2, '#ff2233', 50);
+        }
+
+        function bossAimBullet(speed, size, spread) {
+            const bx = bossFightState.x + bossFightState.size / 2;
+            const by = bossFightState.y + bossFightState.size / 2;
+            const px = player.x + player.size / 2;
+            const py = player.y + player.size / 2;
+            const angle = Math.atan2(py - by, px - bx) + spread;
+            bossProjectiles.push({x:bx,y:by,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,size,life:260,color:'#ff4055'});
+        }
+
+        function bossRadialBurst(count, speed) {
+            const bx = bossFightState.x + bossFightState.size / 2;
+            const by = bossFightState.y + bossFightState.size / 2;
+            for (let i=0;i<count;i++) {
+                const a = Math.PI*2*i/count + bossFightState.laserAngle*0.25;
+                bossProjectiles.push({x:bx,y:by,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,size:6,life:300,color:'#ffad33'});
+            }
+        }
+
+        function bossRing(speed) {
+            bossRings.push({x:bossFightState.x+bossFightState.size/2,y:bossFightState.y+bossFightState.size/2,radius:10,speed,life:105,hit:false});
+        }
+
+        function spawnBossMinion() {
+            if (enemies.length >= 7) return;
+            const side=Math.floor(Math.random()*4), size=18+Math.random()*7;
+            let x,y;
+            if(side===0){x=Math.random()*canvas.width;y=-size;}
+            else if(side===1){x=canvas.width+size;y=Math.random()*canvas.height;}
+            else if(side===2){x=Math.random()*canvas.width;y=canvas.height+size;}
+            else{x=-size;y=Math.random()*canvas.height;}
+            const angle=Math.atan2(player.y-y,player.x-x);
+            enemies.push({x,y,size,color:'#a91f2b',speed:2.1+bossFightState.phase*.3,angle,vx:Math.cos(angle)*2,vy:Math.sin(angle)*2,type:'bossminion',modeType:0,hp:120,maxHp:120,teleportTimer:0});
+        }
+
+        function distanceToSegment(px,py,x1,y1,x2,y2){
+            const dx=x2-x1,dy=y2-y1,len2=dx*dx+dy*dy;
+            if(!len2)return Math.hypot(px-x1,py-y1);
+            let t=((px-x1)*dx+(py-y1)*dy)/len2;t=Math.max(0,Math.min(1,t));
+            return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));
+        }
+
+        function bossVictory(){
+            if(!bossFightState.active)return;
+            bossFightState.active=false;bossFightState.defeated=true;isRunning=false;
+            currentScore=bossFightState.maxHp;
+            const cx=bossFightState.x+bossFightState.size/2,cy=bossFightState.y+bossFightState.size/2;
+            createExplosion(cx,cy,'#ff4455',180);createExplosion(cx,cy,'#ffd166',100);
+            finalScoreEl.innerText='CRIMSON OVERLORD DEFEATED!';
+            const title=document.getElementById('gameOverTitle');
+            if(title){title.innerText='BOSS DEFEATED!';title.style.color='#ffd166';}
+            gameOverScreen.style.display='block';draw();
+        }
+
+        function updateBossFight(){
+            if(!bossFightState.active)return;
+            bossFightState.attackTimer--;bossFightState.dashTimer--;bossFightState.laserTimer--;bossFightState.shockTimer--;bossFightState.minionTimer--;
+            if(bossFightState.hitFlash>0)bossFightState.hitFlash--;if(bossFightState.contactCooldown>0)bossFightState.contactCooldown--;if(bossFightState.enrageFlash>0)bossFightState.enrageFlash--;
+            const ratio=bossFightState.hp/bossFightState.maxHp;
+            const nextPhase=ratio<=.32?3:(ratio<=.68?2:1);
+            if(nextPhase!==bossFightState.phase){bossFightState.phase=nextPhase;bossFightState.enrageFlash=36;bossRadialBurst(nextPhase===3?28:20,nextPhase===3?6.2:5.4);createExplosion(bossFightState.x+bossFightState.size/2,bossFightState.y+bossFightState.size/2,'#fff',55);}
+
+            const bx=bossFightState.x+bossFightState.size/2,by=bossFightState.y+bossFightState.size/2,px=player.x+player.size/2,py=player.y+player.size/2;
+            const target=Math.atan2(py-by,px-bx),strafe=Math.sin(frameCount*(.018+bossFightState.phase*.004))*1.35,moveSpeed=1.55+bossFightState.phase*.65;
+            bossFightState.vx+=Math.cos(target)*.06+Math.cos(target+Math.PI/2)*strafe*.012;
+            bossFightState.vy+=Math.sin(target)*.06+Math.sin(target+Math.PI/2)*strafe*.012;
+            const vel=Math.hypot(bossFightState.vx,bossFightState.vy)||1;
+            bossFightState.vx=bossFightState.vx/vel*moveSpeed;bossFightState.vy=bossFightState.vy/vel*moveSpeed;
+            if(bossFightState.dashTimer<=0&&bossFightState.phase>=2){const a=Math.atan2(py-by,px-bx);bossFightState.vx=Math.cos(a)*(8.5+bossFightState.phase);bossFightState.vy=Math.sin(a)*(8.5+bossFightState.phase);bossRadialBurst(bossFightState.phase===3?20:14,4.6+bossFightState.phase);createExplosion(bx,by,'#ff2233',30);bossFightState.dashTimer=bossFightState.phase===3?130:180;}
+            bossFightState.x+=bossFightState.vx;bossFightState.y+=bossFightState.vy;
+            const margin=34;
+            if(bossFightState.x<margin){bossFightState.x=margin;bossFightState.vx*=-1;}
+            if(bossFightState.x>canvas.width-bossFightState.size-margin){bossFightState.x=canvas.width-bossFightState.size-margin;bossFightState.vx*=-1;}
+            if(bossFightState.y<64){bossFightState.y=64;bossFightState.vy*=-1;}
+            if(bossFightState.y>canvas.height-bossFightState.size-120){bossFightState.y=canvas.height-bossFightState.size-120;bossFightState.vy*=-1;}
+
+            if(bossFightState.attackTimer<=0){
+                if(bossFightState.phase===1){bossAimBullet(5.2,7,-.07);bossAimBullet(5.2,7,.07);bossRadialBurst(10,3.9);bossFightState.attackTimer=78;}
+                else if(bossFightState.phase===2){bossAimBullet(6.1,8,-.13);bossAimBullet(6.1,8,0);bossAimBullet(6.1,8,.13);bossRadialBurst(16,4.8);bossFightState.attackTimer=60;}
+                else {bossAimBullet(7.2,9,-.18);bossAimBullet(7.2,9,0);bossAimBullet(7.2,9,.18);bossRadialBurst(24,6);bossRing(10);bossFightState.attackTimer=44;}
+            }
+            if(bossFightState.phase>=2){
+                bossFightState.laserAngle+=.012+bossFightState.phase*.004;
+                if(bossFightState.laserTimer<=0){bossLasers.push({angle:bossFightState.laserAngle,timer:38,width:bossFightState.phase===3?10:7});bossFightState.laserTimer=bossFightState.phase===3?105:145;}
+            }
+            if(bossFightState.phase>=2&&bossFightState.shockTimer<=0){bossRing(bossFightState.phase===3?13:9);bossFightState.shockTimer=bossFightState.phase===3?95:145;}
+            if(bossFightState.phase===3&&bossFightState.minionTimer<=0){spawnBossMinion();spawnBossMinion();bossFightState.minionTimer=170;}
+
+            if(bossFightState.x<player.x+player.size&&bossFightState.x+bossFightState.size>player.x&&bossFightState.y<player.y+player.size&&bossFightState.y+bossFightState.size>player.y&&bossFightState.contactCooldown<=0){
+                if(!godMode&&!player.isDashing)player.hp-=18;bossFightState.contactCooldown=18;
+                if(player.hp<=0&&!godMode){gameOver();return;}
+            }
+
+            for(let i=bossProjectiles.length-1;i>=0;i--){
+                const b=bossProjectiles[i];b.x+=b.vx;b.y+=b.vy;b.life--;
+                if(b.life<=0||b.x<-50||b.x>canvas.width+50||b.y<-50||b.y>canvas.height+50){bossProjectiles.splice(i,1);continue;}
+                if(player.x<b.x+b.size&&player.x+player.size>b.x&&player.y<b.y+b.size&&player.y+player.size>b.y){
+                    if(!godMode&&!player.isDashing)player.hp-=10;bossProjectiles.splice(i,1);createExplosion(b.x,b.y,'#ff4055',7);if(player.hp<=0&&!godMode){gameOver();return;}
+                }
+            }
+            const pcx=player.x+player.size/2,pcy=player.y+player.size/2;
+            for(let i=bossRings.length-1;i>=0;i--){const r=bossRings[i];r.radius+=r.speed;r.life--;const d=Math.hypot(pcx-r.x,pcy-r.y);if(!r.hit&&Math.abs(d-r.radius)<10){r.hit=true;if(!godMode&&!player.isDashing)player.hp-=13;if(player.hp<=0&&!godMode){gameOver();return;}}if(r.life<=0)bossRings.splice(i,1);}
+            for(let i=bossLasers.length-1;i>=0;i--){const l=bossLasers[i];l.timer--;if(l.timer<=0){bossLasers.splice(i,1);continue;}const d=distanceToSegment(pcx,pcy,bx,by,bx+Math.cos(l.angle)*1500,by+Math.sin(l.angle)*1500);if(d<l.width+player.size*.45&&!godMode&&!player.isDashing){player.hp-=bossFightState.phase===3?7:4;if(player.hp<=0){gameOver();return;}}}
+
+            for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];if(b.x>bossFightState.x&&b.x<bossFightState.x+bossFightState.size&&b.y>bossFightState.y&&b.y<bossFightState.y+bossFightState.size){bossFightState.hp=Math.max(0,bossFightState.hp-30);bossFightState.hitFlash=5;currentScore+=30;bullets.splice(i,1);createExplosion(b.x,b.y,'#ffff66',6);if(bossFightState.hp<=0){bossVictory();return;}}}
+        }
+
         function update() {
             if (!isRunning) return;
             if (isPaused) return;
 
             const now = Date.now();
             const elapsed = (now - startTime - totalPausedTime) / 1000;
+            if (elapsed >= 5 && selectedMode !== 'bossfight' && !bossPlayedModes.has(selectedMode)) markModePlayedForBoss();
             
             // Score Display
-            if (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'turret', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) {
+            if (survivalScoreModes.has(selectedMode)) {
                 scoreEl.textContent = elapsed.toFixed(1) + "s";
             } else {
-                scoreEl.textContent = currentScore;
+                scoreEl.textContent = (selectedMode === 'bossfight' && bossFightState.active)
+                    ? `BOSS HP ${Math.max(0, Math.ceil(bossFightState.hp)).toLocaleString()}`
+                    : currentScore;
             }
             
             difficultyMultiplier = 1 + (elapsed / 30); 
@@ -1457,18 +1785,18 @@
             if (selectedMode === 'blaster') adjustedSpawnRate = Math.floor(adjustedSpawnRate * 0.7);
             if (selectedMode === 'minefield') adjustedSpawnRate = 30; 
             if (selectedMode === 'swarm') adjustedSpawnRate = Math.max(5, Math.floor(adjustedSpawnRate * 0.2)); 
-            if (['chameleon','bomber','freeze','orbit','laser','titan','twin','blink','decoy','vampire','boxer','turret','pvp','volatile','splitter','trail','dash','sentry','builder','sniper','charge','necro','pinball','swap','graze','stomp','rewind','growth','vortex','meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) adjustedSpawnRate = Math.floor(adjustedSpawnRate * 0.85);
+            if (['chameleon','bomber','freeze','orbit','laser','titan','twin','blink','decoy','vampire','boxer','turret','pvp','volatile','splitter','trail','dash','sentry','builder','sniper','charge','necro','pinball','swap','graze','stomp','rewind','growth','vortex','meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand', 'ringlock','zigzag','patrol','scatter','boomerang','strobe','blackout','lightning','crossfire','rainfire','shockwave','nomadsafe','conveyor','cyclone','fourwinds','floorlava','hotzone','crush','movingwalls','ambush','bossrush','bodyguard','decoyrain','enemymagnet','repulsor','heavycorner','lowgravity','countdown','suddenrush','doppelganger'].includes(selectedMode)) adjustedSpawnRate = Math.floor(adjustedSpawnRate * 0.85);
             if (selectedMode === 'gravity') adjustedSpawnRate = Math.floor(adjustedSpawnRate * 1.2); 
             if (selectedMode === 'pvp') adjustedSpawnRate = 1000;
             if (selectedMode === 'speedster') adjustedSpawnRate = Math.max(5, Math.floor(adjustedSpawnRate * 0.5));
             if (selectedMode === 'frenzy') adjustedSpawnRate = Math.max(3, Math.floor(adjustedSpawnRate * 0.3));
             if (selectedMode === 'laststand') adjustedSpawnRate = Math.max(4, Math.floor(adjustedSpawnRate * 0.55));
 
-            if (frameCount % Math.max(5, adjustedSpawnRate) === 0) {
+            if (selectedMode !== 'bossfight' && frameCount % Math.max(5, adjustedSpawnRate) === 0) {
                 spawnEnemy();
             }
 
-            if ((['collector','snake','eater','titan','vampire','magnet','magnetstorm'].includes(selectedMode)) && orbs.length === 0) {
+            if ((['collector','snake','eater','titan','vampire','magnet','magnetstorm','countdown'].includes(selectedMode)) && orbs.length === 0) {
                 spawnOrb();
             }
 
@@ -1487,6 +1815,7 @@
                 if (selectedMode === 'glass') moveSpeed = 6;
                 if (selectedMode === 'rage') moveSpeed = Math.min(11, 5 + player.rageBonus * 0.35);
                 if (selectedMode === 'surge' && player.surgeTimer > 0) moveSpeed = 13;
+                if (selectedMode === 'lowgravity') moveSpeed = 3.5;
 
                 let up = keys.w || keys.ArrowUp || keys.i;
                 let down = keys.s || keys.ArrowDown || keys.k;
@@ -1498,7 +1827,13 @@
                     let tempLeft = left; left = right; right = tempLeft;
                 }
 
-                if (selectedMode === 'drift' || selectedMode === 'pinball') {
+                if (selectedMode === 'lowgravity') {
+                    const accel=0.28;
+                    if(up)player.velY-=accel;if(down)player.velY+=accel;if(left)player.velX-=accel;if(right)player.velX+=accel;
+                    player.velX*=0.995;player.velY*=0.995;
+                    player.dx=player.velX;player.dy=player.velY;
+                    const sp=Math.hypot(player.dx,player.dy);if(sp>7){player.dx=player.dx/sp*7;player.dy=player.dy/sp*7;}
+                } else if (selectedMode === 'drift' || selectedMode === 'pinball') {
                     const accel = 0.5;
                     const friction = selectedMode === 'pinball' ? 1 : 0.95; // No friction in pinball
                     if (up) player.velY -= accel;
@@ -1534,6 +1869,11 @@
             }
 
             if (selectedMode === 'mirror') player.dx *= -1;
+            if (selectedMode === 'strobe' && strobeTimer > 240) {
+                if (player.modeState === 1) player.dx *= -1;
+                else if (player.modeState === 2) player.dy *= -1;
+                else if (player.modeState === 3) { const t=player.dx; player.dx=player.dy; player.dy=t; }
+            }
 
             if (selectedMode === 'surge') {
                 player.surgeTimer--;
@@ -1602,6 +1942,12 @@
                 if (player.y > canvas.height - player.size) { player.y = canvas.height - player.size; if(selectedMode === 'drift' || selectedMode === 'pinball') player.velY *= -0.9; }
             }
 
+            if (selectedMode === 'movingwalls') {
+                for (const w of movingWalls) {
+                    if(player.x<w.x+w.w&&player.x+player.size>w.x&&player.y<w.y+w.h&&player.y+player.size>w.y&&!godMode) gameOver();
+                }
+            }
+
             // Bullets
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let b = bullets[i];
@@ -1610,6 +1956,11 @@
                 if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
                     bullets.splice(i, 1);
                 }
+            }
+
+            if (selectedMode === 'bossfight') {
+                updateBossFight();
+                if (!isRunning) return;
             }
 
             // Bombs
@@ -1640,6 +1991,146 @@
                     const e = enemies[i];
                     if (Math.hypot(e.x + e.size/2 - px, e.y + e.size/2 - py) < 130) killEnemy(i);
                 }
+            }
+
+            // === 30 new modes ===
+            if (selectedMode === 'ringlock') {
+                safeZone.x = canvas.width / 2; safeZone.y = canvas.height / 2;
+                safeZone.radius = Math.max(95, Math.min(canvas.width, canvas.height) * (0.38 - elapsed * 0.0045));
+                const d = Math.hypot(player.x + player.size/2 - safeZone.x, player.y + player.size/2 - safeZone.y);
+                if (d > safeZone.radius && !godMode) gameOver();
+            }
+
+            if (selectedMode === 'strobe') {
+                strobeTimer = frameCount % 300;
+                player.modeState = strobeTimer > 240 ? ((Math.floor(frameCount / 15) % 3) + 1) : 0;
+            }
+
+            if (selectedMode === 'blackout') blackoutTimer = frameCount % 360;
+
+            if (selectedMode === 'lightning' && frameCount % 110 === 0) {
+                lightningStrikes.push({x:50 + Math.random()*Math.max(1,canvas.width-100), y:50 + Math.random()*Math.max(1,canvas.height-100), timer:55});
+            }
+            for (let i=lightningStrikes.length-1;i>=0;i--) {
+                const strike=lightningStrikes[i]; strike.timer--;
+                if (strike.timer<=0) {
+                    createExplosion(strike.x,strike.y,'#ffffff',18);
+                    const d=Math.hypot(player.x+player.size/2-strike.x,player.y+player.size/2-strike.y);
+                    if(d<65 && !godMode && !player.isDashing) gameOver();
+                    lightningStrikes.splice(i,1);
+                }
+            }
+
+            function addEnemyBullet(x,y,angle,speed,size=6){
+                enemyBullets.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,size,life:240});
+            }
+            if (selectedMode === 'crossfire' && frameCount % 35 === 0) {
+                const side=Math.floor(Math.random()*4); let x=0,y=0;
+                if(side===0){x=Math.random()*canvas.width;y=-10;} else if(side===1){x=canvas.width+10;y=Math.random()*canvas.height;} else if(side===2){x=Math.random()*canvas.width;y=canvas.height+10;} else {x=-10;y=Math.random()*canvas.height;}
+                addEnemyBullet(x,y,Math.atan2(player.y+player.size/2-y,player.x+player.size/2-x),6.0,7);
+            }
+            if (selectedMode === 'rainfire' && frameCount % 11 === 0) addEnemyBullet(Math.random()*canvas.width,-10,Math.PI/2,4.2,6);
+            for(let i=enemyBullets.length-1;i>=0;i--){
+                const b=enemyBullets[i]; b.x+=b.vx; b.y+=b.vy; b.life--;
+                if(b.life<=0||b.x<-40||b.x>canvas.width+40||b.y<-40||b.y>canvas.height+40){enemyBullets.splice(i,1);continue;}
+                if(player.x<b.x+b.size&&player.x+player.size>b.x&&player.y<b.y+b.size&&player.y+player.size>b.y){
+                    if(!godMode&&!player.isDashing&&!player.isStomping) gameOver();
+                    enemyBullets.splice(i,1);
+                }
+            }
+
+            if (selectedMode === 'shockwave' && frameCount % 150 === 0) shockwaves.push({x:canvas.width/2,y:canvas.height/2,radius:10,speed:6.5,life:120});
+            for(let i=shockwaves.length-1;i>=0;i--){
+                const w=shockwaves[i]; w.radius+=w.speed; w.life--;
+                const d=Math.hypot(player.x+player.size/2-w.x,player.y+player.size/2-w.y);
+                if(Math.abs(d-w.radius)<8&&!godMode&&!player.isDashing&&!player.isStomping) gameOver();
+                if(w.life<=0) shockwaves.splice(i,1);
+            }
+
+            if (selectedMode === 'nomadsafe') {
+                safeZone.x+=safeZone.vx; safeZone.y+=safeZone.vy;
+                if(safeZone.x<120||safeZone.x>canvas.width-120) safeZone.vx*=-1;
+                if(safeZone.y<120||safeZone.y>canvas.height-120) safeZone.vy*=-1;
+                safeZone.radius=140;
+                const d=Math.hypot(player.x+player.size/2-safeZone.x,player.y+player.size/2-safeZone.y);
+                if(d>safeZone.radius && frameCount%12===0&&!godMode) gameOver();
+            }
+
+            if (selectedMode === 'conveyor') {
+                const a=elapsed*0.7; currentWindX=Math.cos(a)*1.1; currentWindY=Math.sin(a)*1.1;
+                player.dx+=currentWindX; player.dy+=currentWindY;
+            }
+            if (selectedMode === 'cyclone') {
+                const cx=canvas.width/2,cy=canvas.height/2; const dx=player.x+player.size/2-cx,dy=player.y+player.size/2-cy,d=Math.max(25,Math.hypot(dx,dy));
+                player.dx+=(-dy/d)*1.0; player.dy+=(dx/d)*1.0;
+            }
+            if (selectedMode === 'fourwinds') {
+                const dir=Math.floor(elapsed/3)%4;
+                currentWindX=dir===1?-1.6:dir===3?1.6:0;
+                currentWindY=dir===0?-1.6:dir===2?1.6:0;
+                player.dx+=currentWindX; player.dy+=currentWindY;
+            }
+
+            if (selectedMode === 'floorlava') {
+                if(frameCount%100===0&&lavaZones.length<3){
+                    const horizontal=Math.random()>0.5;
+                    lavaZones.push(horizontal?{x:0,y:Math.random()*canvas.height,w:canvas.width,h:32,timer:330}:{x:Math.random()*canvas.width,y:0,w:32,h:canvas.height,timer:330});
+                }
+                for(let i=lavaZones.length-1;i>=0;i--){const z=lavaZones[i];z.timer--;if(z.timer<=0){lavaZones.splice(i,1);continue;}if(player.x<z.x+z.w&&player.x+player.size>z.x&&player.y<z.y+z.h&&player.y+player.size>z.y&&!godMode&&!player.isDashing)gameOver();}
+            }
+
+            if (selectedMode === 'hotzone') {
+                if(Math.hypot(player.dx,player.dy)<0.05) hotZoneRadius=Math.min(230,hotZoneRadius+0.9); else hotZoneRadius=Math.max(45,hotZoneRadius-0.18);
+                const d=Math.hypot(player.x+player.size/2-canvas.width/2,player.y+player.size/2-canvas.height/2);
+                if(d<hotZoneRadius&&!godMode) gameOver();
+            }
+
+            if (selectedMode === 'crush') {
+                crushAmount=Math.min(Math.min(canvas.width,canvas.height)*0.31,elapsed*2.4);
+                const left=crushAmount,right=canvas.width-crushAmount,top=crushAmount,bottom=canvas.height-crushAmount;
+                if((player.x<left||player.x+player.size>right||player.y<top||player.y+player.size>bottom)&&!godMode) gameOver();
+            }
+
+            if (selectedMode === 'movingwalls') {
+                if(frameCount%90===0&&movingWalls.length<4){
+                    const vertical=Math.random()>0.5;
+                    movingWalls.push(vertical?{x:-70,y:40+Math.random()*Math.max(1,canvas.height-180),w:48,h:140,vx:2.2,vy:0,life:520}:{x:40+Math.random()*Math.max(1,canvas.width-180),y:-70,w:140,h:48,vx:0,vy:2.2,life:520});
+                }
+                for(const w of movingWalls){w.x+=w.vx;w.y+=w.vy;w.life--;}
+                movingWalls=movingWalls.filter(w=>w.life>0&&w.x<canvas.width+100&&w.y<canvas.height+100);
+            }
+
+            if (selectedMode === 'ambush' && frameCount%210===0) {
+                const a=Math.random()*Math.PI*2,dist=220+Math.random()*120;
+                const e={x:Math.max(0,Math.min(canvas.width-22,player.x+Math.cos(a)*dist)),y:Math.max(0,Math.min(canvas.height-22,player.y+Math.sin(a)*dist)),size:22,color:'#ff2222',speed:Math.min(4.8,2.2+difficultyMultiplier*0.7),angle:0,vx:0,vy:0,type:'ambush',modeType:0,hp:400,maxHp:400,teleportTimer:100};
+                enemies.push(e); createExplosion(e.x+11,e.y+11,'#ff2222',10);
+            }
+
+            if (selectedMode === 'bodyguard' && frameCount%150===0 && !enemies.some(e=>e.guardian)) {
+                enemies.push({x:canvas.width/2-35,y:canvas.height/2-35,size:70,color:'#880000',speed:1.2,angle:0,vx:0,vy:0,type:'guardian',modeType:0,hp:1200,maxHp:1200,teleportTimer:100,guardian:true});
+            }
+            if (selectedMode === 'decoyrain' && frameCount%75===0) {
+                decoys.push({x:Math.random()*Math.max(1,canvas.width-player.size),y:Math.random()*Math.max(1,canvas.height-player.size),life:150});
+                if(decoys.length>6)decoys.shift();
+            }
+            if (selectedMode === 'heavycorner') {
+                cornerTimer++;
+                if(cornerTimer%300===0){cornerX*=-1;if(Math.random()>0.5)cornerY*=-1;}
+                const tx=cornerX>0?canvas.width:0,ty=cornerY>0?canvas.height:0,dx=tx-(player.x+player.size/2),dy=ty-(player.y+player.size/2),d=Math.max(1,Math.hypot(dx,dy));
+                player.dx+=(dx/d)*0.55;player.dy+=(dy/d)*0.55;
+            }
+            if (selectedMode === 'countdown') {
+                countdownTime-=1/60;
+                if(countdownTime<=0&&!godMode) gameOver();
+                if(orbs.length===0) spawnOrb();
+            }
+            if (selectedMode === 'suddenrush' && frameCount%240===0) {
+                for(const e of enemies){const a=Math.atan2(player.y+player.size/2-(e.y+e.size/2),player.x+player.size/2-(e.x+e.size/2));e.x+=Math.cos(a)*26;e.y+=Math.sin(a)*26;}
+                createExplosion(player.x+player.size/2,player.y+player.size/2,'#ff8800',18);
+            }
+            if (selectedMode === 'doppelganger') {
+                doppel.x=canvas.width-player.x-player.size; doppel.y=canvas.height-player.y-player.size; doppel.size=player.size;
+                if(player.x<doppel.x+doppel.size&&player.x+player.size>doppel.x&&player.y<doppel.y+doppel.size&&player.y+player.size>doppel.y&&!godMode) gameOver();
             }
 
             // Enemies Loop
@@ -1673,6 +2164,40 @@
                 if (selectedMode === 'snare') {
                     const near = Math.hypot(e.x + e.size/2 - (player.x + player.size/2), e.y + e.size/2 - (player.y + player.size/2));
                     if (near < 180) speedFactor *= 0.25;
+                }
+
+                // Keep enemies challenging without letting their movement become
+                // permanently faster than the player's available movement speed.
+                // The cap is applied after mode-specific speed factors so modes like
+                // Speedster, Timewarp, Snare, and Last Stand still behave differently.
+                const getPlayerSpeedCap = () => {
+                    let maxPlayerSpeed = player.speed;
+                    if (selectedMode === 'speedster') maxPlayerSpeed = 10;
+                    if (selectedMode === 'slowmo') maxPlayerSpeed = 3;
+                    if (selectedMode === 'turret') maxPlayerSpeed = 2.5;
+                    if (selectedMode === 'berserker') maxPlayerSpeed = Math.min(12, 5 + elapsed * 0.08);
+                    if (selectedMode === 'giant') maxPlayerSpeed = 3;
+                    if (selectedMode === 'glass') maxPlayerSpeed = 6;
+                    if (selectedMode === 'rage') maxPlayerSpeed = Math.min(11, 5 + player.rageBonus * 0.35);
+                    if (selectedMode === 'surge') maxPlayerSpeed = player.surgeTimer > 0 ? 13 : 5;
+                    if (selectedMode === 'drift') maxPlayerSpeed = 10;
+                    if (selectedMode === 'pinball') maxPlayerSpeed = 15;
+                    if (selectedMode === 'lowgravity') maxPlayerSpeed = 7;
+                    if (selectedMode === 'bodyguard') maxPlayerSpeed = 5;
+                    return Math.max(1, maxPlayerSpeed * 0.88);
+                };
+
+                if (e.type !== 'mine' && speedFactor > 0) {
+                    const maxEnemySpeed = getPlayerSpeedCap() / speedFactor;
+                    if (e.speed > maxEnemySpeed) e.speed = maxEnemySpeed;
+
+                    // Ricochet/Chaos/Bouncer store movement in vx/vy, so cap that
+                    // velocity too when difficulty has already increased their speed.
+                    const velocity = Math.hypot(e.vx, e.vy);
+                    if (velocity > e.speed && velocity > 0) {
+                        e.vx = (e.vx / velocity) * e.speed;
+                        e.vy = (e.vy / velocity) * e.speed;
+                    }
                 }
 
                 // Repel Force
@@ -1714,7 +2239,44 @@
                 }
 
                 // Movement Logic
-                if (selectedMode === 'chaos' || selectedMode === 'bouncer') {
+                if (selectedMode === 'patrol') {
+                    e.patrolAngle += 0.012;
+                    const tx=e.patrolX+Math.cos(e.patrolAngle)*e.patrolRadius;
+                    const ty=e.patrolY+Math.sin(e.patrolAngle)*e.patrolRadius;
+                    const a=Math.atan2(ty-(e.y+e.size/2),tx-(e.x+e.size/2));
+                    e.x+=Math.cos(a)*e.speed*speedFactor;e.y+=Math.sin(a)*e.speed*speedFactor;
+                } else if (selectedMode === 'zigzag') {
+                    const base=Math.atan2(player.y+player.size/2-(e.y+e.size/2),player.x+player.size/2-(e.x+e.size/2));
+                    const a=base+Math.sin(frameCount*0.09+e.zigzagOffset)*0.85;
+                    e.x+=Math.cos(a)*e.speed*speedFactor;e.y+=Math.sin(a)*e.speed*speedFactor;
+                } else if (selectedMode === 'scatter') {
+                    const dx=(e.x+e.size/2)-(player.x+player.size/2),dy=(e.y+e.size/2)-(player.y+player.size/2),d=Math.max(1,Math.hypot(dx,dy));
+                    const a=d<220?Math.atan2(dy,dx):Math.atan2(-dy,-dx);
+                    e.x+=Math.cos(a)*e.speed*speedFactor;e.y+=Math.sin(a)*e.speed*speedFactor;
+                } else if (selectedMode === 'boomerang') {
+                    e.reverseTimer--; if(e.reverseTimer<=0){e.vx=-e.vx;e.vy=-e.vy;e.reverseTimer=80+Math.random()*100;}
+                    if(e.vx===0&&e.vy===0){const a=Math.atan2(player.y-e.y,player.x-e.x);e.vx=Math.cos(a)*e.speed;e.vy=Math.sin(a)*e.speed;}
+                    e.x+=e.vx*speedFactor;e.y+=e.vy*speedFactor;
+                    if(e.x<0||e.x>canvas.width-e.size)e.vx*=-1; if(e.y<0||e.y>canvas.height-e.size)e.vy*=-1;
+                } else if (selectedMode === 'enemymagnet') {
+                    let nearest=null,md=Infinity;
+                    for(let j=0;j<enemies.length;j++){if(j===i)continue;const o=enemies[j],d=Math.hypot(o.x-e.x,o.y-e.y);if(d<md){md=d;nearest=o;}}
+                    if(nearest){const a=Math.atan2(nearest.y-e.y,nearest.x-e.x);e.x+=Math.cos(a)*e.speed*0.75*speedFactor;e.y+=Math.sin(a)*e.speed*0.75*speedFactor;}
+                    const a=Math.atan2(player.y-e.y,player.x-e.x);e.x+=Math.cos(a)*e.speed*0.25*speedFactor;e.y+=Math.sin(a)*e.speed*0.25*speedFactor;
+                } else if (selectedMode === 'repulsor') {
+                    let rx=0,ry=0;
+                    for(let j=0;j<enemies.length;j++){if(j===i)continue;const o=enemies[j],dx=e.x-o.x,dy=e.y-o.y,d=Math.max(10,Math.hypot(dx,dy));if(d<150){rx+=dx/d*(150-d)/150;ry+=dy/d*(150-d)/150;}}
+                    const a=Math.atan2(player.y-e.y,player.x-e.x);e.x+=(Math.cos(a)+rx*1.7)*e.speed*0.7*speedFactor;e.y+=(Math.sin(a)+ry*1.7)*e.speed*0.7*speedFactor;
+                } else if (selectedMode === 'bossrush') {
+                    const a=Math.atan2(player.y-e.y,player.x-e.x);e.x+=Math.cos(a)*e.speed*speedFactor;e.y+=Math.sin(a)*e.speed*speedFactor;
+                } else if (selectedMode === 'bodyguard' && e.guardian) {
+                    const cx=canvas.width/2,cy=canvas.height/2,d=Math.hypot(e.x+e.size/2-cx,e.y+e.size/2-cy);
+                    if(d>25){const a=Math.atan2(cy-(e.y+e.size/2),cx-(e.x+e.size/2));e.x+=Math.cos(a)*e.speed*speedFactor;e.y+=Math.sin(a)*e.speed*speedFactor;}
+                } else if (selectedMode === 'bodyguard') {
+                    const a=Math.atan2(player.y-e.y,player.x-e.x);e.x+=Math.cos(a)*e.speed*speedFactor;e.y+=Math.sin(a)*e.speed*speedFactor;
+                } else if (selectedMode === 'ambush' || selectedMode === 'suddenrush') {
+                    const a=Math.atan2(player.y-e.y,player.x-e.x);e.x+=Math.cos(a)*e.speed*speedFactor;e.y+=Math.sin(a)*e.speed*speedFactor;
+                } else if (selectedMode === 'chaos' || selectedMode === 'bouncer') {
                     if (e.vx === 0 && e.vy === 0) {
                         const a = Math.random() * Math.PI * 2;
                         e.vx = Math.cos(a) * e.speed;
@@ -1809,7 +2371,7 @@
                         let targetY = player.y + player.size/2;
                         
                         // Decoy Logic
-                        if (selectedMode === 'decoy' && decoys.length > 0) {
+                        if ((selectedMode === 'decoy' || selectedMode === 'decoyrain') && decoys.length > 0) {
                             targetX = decoys[0].x + player.size/2;
                             targetY = decoys[0].y + player.size/2;
                         }
@@ -2036,6 +2598,7 @@
                         if (selectedMode === 'eater') player.size += 2; 
                         if (selectedMode === 'titan') player.size = Math.max(20, player.size - 5); 
                         if (selectedMode === 'vampire') player.energy = Math.min(100, player.energy + 20);
+                        if (selectedMode === 'countdown') countdownTime = Math.min(18, countdownTime + 4);
                     }
                     if (selectedMode === 'twin') {
                         const twinX = canvas.width - player.x - player.size;
@@ -2472,6 +3035,42 @@
                 ctx.shadowBlur = 0;
             }
 
+            // New mode visuals
+            if (selectedMode === 'ringlock') {
+                ctx.strokeStyle='rgba(0,255,255,0.85)';ctx.lineWidth=4;ctx.beginPath();ctx.arc(safeZone.x,safeZone.y,safeZone.radius,0,Math.PI*2);ctx.stroke();
+            }
+            if (selectedMode === 'nomadsafe') {
+                ctx.fillStyle='rgba(0,255,136,0.10)';ctx.beginPath();ctx.arc(safeZone.x,safeZone.y,safeZone.radius,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#00ff88';ctx.lineWidth=3;ctx.stroke();
+            }
+            if (selectedMode === 'lightning') { for(const l of lightningStrikes){ctx.strokeStyle=`rgba(255,255,0,${Math.max(.2,l.timer/55)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(l.x,l.y,65,0,Math.PI*2);ctx.stroke();} }
+            if (selectedMode === 'crossfire' || selectedMode === 'rainfire') { ctx.fillStyle='#ffcc00'; for(const b of enemyBullets){ctx.beginPath();ctx.arc(b.x,b.y,b.size,0,Math.PI*2);ctx.fill();} }
+            if (selectedMode === 'shockwave') { for(const w of shockwaves){ctx.strokeStyle=`rgba(0,255,255,${Math.max(0,w.life/120)})`;ctx.lineWidth=4;ctx.beginPath();ctx.arc(w.x,w.y,w.radius,0,Math.PI*2);ctx.stroke();} }
+            if (selectedMode === 'floorlava') { ctx.fillStyle='rgba(255,70,0,0.35)'; for(const z of lavaZones)ctx.fillRect(z.x,z.y,z.w,z.h); }
+            if (selectedMode === 'crush') { ctx.fillStyle='rgba(255,0,0,0.20)';ctx.fillRect(0,0,canvas.width,crushAmount);ctx.fillRect(0,canvas.height-crushAmount,canvas.width,crushAmount);ctx.fillRect(0,0,crushAmount,canvas.height);ctx.fillRect(canvas.width-crushAmount,0,crushAmount,canvas.height); }
+            if (selectedMode === 'movingwalls') { ctx.fillStyle='rgba(68,136,255,0.30)';ctx.strokeStyle='#4488ff'; for(const w of movingWalls){ctx.fillRect(w.x,w.y,w.w,w.h);ctx.strokeRect(w.x,w.y,w.w,w.h);} }
+            if (selectedMode === 'hotzone') { ctx.fillStyle='rgba(255,0,0,0.18)';ctx.beginPath();ctx.arc(canvas.width/2,canvas.height/2,hotZoneRadius,0,Math.PI*2);ctx.fill(); }
+            if (selectedMode === 'doppelganger') { ctx.fillStyle='rgba(255,255,255,0.20)';ctx.strokeStyle='#fff';ctx.strokeRect(doppel.x,doppel.y,doppel.size,doppel.size);ctx.fillRect(doppel.x,doppel.y,doppel.size,doppel.size); }
+            if (selectedMode === 'countdown') { ctx.fillStyle='#fff';ctx.font='bold 22px monospace';ctx.textAlign='center';ctx.fillText(Math.max(0,countdownTime).toFixed(1),canvas.width/2,38);ctx.textAlign='left'; }
+            if (selectedMode === 'blackout' && blackoutTimer>240) {
+                ctx.fillStyle='rgba(0,0,0,0.95)';ctx.fillRect(0,0,canvas.width,canvas.height);const px=player.x+player.size/2,py=player.y+player.size/2;const g=ctx.createRadialGradient(px,py,25,px,py,165);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.95)');ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);
+            }
+
+            // Boss Fight visuals.
+            if (selectedMode === 'bossfight' && (bossFightState.active || bossFightState.defeated)) {
+                const bx=bossFightState.x+bossFightState.size/2, by=bossFightState.y+bossFightState.size/2;
+                const pulse=1+Math.sin(Date.now()/120)*.08;
+                const phaseColor=bossFightState.phase===3?'#ff1638':(bossFightState.phase===2?'#ff6a24':'#b3172c');
+                ctx.fillStyle='rgba(40,0,8,.22)';ctx.fillRect(0,0,canvas.width,canvas.height);
+                for(const b of bossProjectiles){ctx.fillStyle=b.color;ctx.shadowColor=b.color;ctx.shadowBlur=12;ctx.beginPath();ctx.arc(b.x,b.y,b.size,0,Math.PI*2);ctx.fill();}
+                ctx.shadowBlur=0;
+                for(const r of bossRings){ctx.strokeStyle=`rgba(255,${bossFightState.phase===3?50:140},40,${Math.max(0,r.life/105)})`;ctx.lineWidth=bossFightState.phase===3?5:3;ctx.beginPath();ctx.arc(r.x,r.y,r.radius,0,Math.PI*2);ctx.stroke();}
+                for(const l of bossLasers){const a=Math.min(1,l.timer<10?l.timer/10:1);ctx.strokeStyle=`rgba(255,30,60,${a})`;ctx.lineWidth=l.width;ctx.shadowColor='#ff1638';ctx.shadowBlur=18;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+Math.cos(l.angle)*1500,by+Math.sin(l.angle)*1500);ctx.stroke();ctx.shadowBlur=0;}
+                ctx.save();ctx.translate(bx,by);ctx.rotate(Date.now()/900);ctx.strokeStyle=`rgba(255,40,60,${bossFightState.phase===3?.85:.6})`;ctx.lineWidth=4;ctx.shadowColor=phaseColor;ctx.shadowBlur=25;ctx.beginPath();ctx.arc(0,0,bossFightState.size*.82*pulse,0,Math.PI*2);ctx.stroke();ctx.rotate(Math.PI/4);ctx.beginPath();ctx.rect(-bossFightState.size*.68,-bossFightState.size*.68,bossFightState.size*1.36,bossFightState.size*1.36);ctx.stroke();ctx.restore();
+                const body=bossFightState.hitFlash>0?'#fff':phaseColor;ctx.fillStyle=body;ctx.shadowColor=phaseColor;ctx.shadowBlur=30;ctx.beginPath();ctx.arc(bx,by,bossFightState.size*.46,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#180005';ctx.beginPath();ctx.arc(bx,by,bossFightState.size*.22+Math.sin(Date.now()/90)*2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#ffd166';ctx.lineWidth=3;ctx.beginPath();ctx.arc(bx,by,bossFightState.size*.25,0,Math.PI*2);ctx.stroke();
+                const barW=Math.min(560,canvas.width*.62),barX=(canvas.width-barW)/2,barY=66;ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(barX-5,barY-5,barW+10,24);ctx.fillStyle='#4a0b13';ctx.fillRect(barX,barY,barW,14);ctx.fillStyle=phaseColor;ctx.fillRect(barX,barY,barW*(bossFightState.hp/bossFightState.maxHp));ctx.strokeStyle='#ffd166';ctx.lineWidth=2;ctx.strokeRect(barX,barY,barW,14);ctx.fillStyle='#fff';ctx.font='bold 13px Segoe UI';ctx.textAlign='center';ctx.fillText(`CRIMSON OVERLORD • PHASE ${bossFightState.phase}`,canvas.width/2,barY+34);ctx.textAlign='left';
+                if(bossFightState.enrageFlash>0){ctx.fillStyle=`rgba(255,20,40,${bossFightState.enrageFlash/120})`;ctx.fillRect(0,0,canvas.width,canvas.height);}
+            }
+
             // Player
             ctx.shadowBlur = player.glow;
             ctx.shadowColor = player.color;
@@ -2576,11 +3175,11 @@
             }
 
             // HUD
-            if (['freeze', 'blink', 'decoy', 'boxer', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'swap', 'stomp', 'rewind'].includes(selectedMode)) {
+            if (['freeze', 'blink', 'decoy', 'boxer', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'swap', 'stomp', 'rewind', 'bossfight'].includes(selectedMode)) {
                 ctx.fillStyle = '#fff';
                 ctx.font = '12px Segoe UI';
                 ctx.textAlign = 'center';
-                const status = player.abilityCooldown > 0 ? "Recharging..." : "READY (Press Space)";
+                const status = selectedMode === 'bossfight' ? 'FIRE (Click / Space)' : (player.abilityCooldown > 0 ? "Recharging..." : "READY (Press Space)");
                 ctx.fillText(status, player.x + player.size/2, player.y - 10);
             }
 
@@ -2604,6 +3203,11 @@
                 ctx.strokeRect(x, y, barW, barH);
             }
 
+            if (selectedMode === 'bossfight') {
+                const barW=Math.min(320,canvas.width*.42),x=20,y=canvas.height-24;
+                ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(x-4,y-4,barW+8,18);ctx.fillStyle='#222';ctx.fillRect(x,y,barW,10);ctx.fillStyle='#4488ff';ctx.fillRect(x,y,barW*Math.max(0,player.hp/player.maxHp));ctx.strokeStyle='#fff';ctx.strokeRect(x,y,barW,10);ctx.fillStyle='#fff';ctx.font='11px Segoe UI';ctx.textAlign='left';ctx.fillText(`YOU ${Math.max(0,Math.ceil(player.hp))}/${player.maxHp}`,x,y-8);
+            }
+
             if (isPaused) {
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
                 ctx.fillRect(0,0,canvas.width, canvas.height);
@@ -2625,13 +3229,16 @@
 
         function gameOver() {
             isRunning = false;
+            if (selectedMode === 'bossfight') bossFightState.active = false;
+            const gameOverTitle = document.getElementById('gameOverTitle');
+            if (gameOverTitle) { gameOverTitle.innerText = 'YOU DIED'; gameOverTitle.style.color = '#ff4444'; }
             createExplosion(player.x, player.y, player.color);
             draw(); 
             
             let resultText = "";
             let scoreValue = 0;
 
-            if (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'turret', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) {
+            if (survivalScoreModes.has(selectedMode)) {
                 const now = Date.now();
                 const elapsed = ((now - startTime - totalPausedTime) / 1000).toFixed(1);
                 scoreValue = parseFloat(elapsed);
@@ -2647,7 +3254,7 @@
             
             if (scoreValue > parseFloat(currentHigh)) {
                 localStorage.setItem(storageKey, scoreValue);
-                const unit = (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) ? 's' : '';
+                const unit = (survivalScoreModes.has(selectedMode)) ? 's' : '';
                 highScoreEl.innerText = `Best (${modes[selectedMode].label}/${difficulties[selectedDifficulty].label}): ${scoreValue}${unit}`;
             }
 
@@ -2656,6 +3263,9 @@
 
         function showMainMenu() {
             isRunning = false;
+            bossFightState.active = false;
+            const gameOverTitle = document.getElementById('gameOverTitle');
+            if (gameOverTitle) { gameOverTitle.innerText = 'YOU DIED'; gameOverTitle.style.color = '#ff4444'; }
             gameOverScreen.style.display = 'none';
             startMenu.style.display = 'block';
             gameTitle.style.display = 'none';
@@ -2672,6 +3282,16 @@
             railbeams = [];
             allies = [];
             meteors = [];
+            lightningStrikes = [];
+            enemyBullets = [];
+            shockwaves = [];
+            lavaZones = [];
+            movingWalls = [];
+            bossProjectiles = [];
+            bossLasers = [];
+            bossRings = [];
+            bossFightState.active = false;
+            bossFightState.defeated = false;
             player.x = canvas.width / 2 - player.size/2;
             player.y = canvas.height / 2 - player.size/2;
             player.tail = [];
@@ -2718,6 +3338,15 @@
             player.phaseTimer = 0;
             player.surgeTimer = 0;
             player.rageBonus = 0;
+            countdownTime = 12;
+            safeZone.x = canvas.width / 2;
+            safeZone.y = canvas.height / 2;
+            safeZone.radius = Math.min(canvas.width, canvas.height) * 0.38;
+            safeZone.vx = 1.2; safeZone.vy = 0.9;
+            currentWindX = 0; currentWindY = 0;
+            cornerTimer = 0; cornerX = Math.random() > 0.5 ? 1 : -1; cornerY = Math.random() > 0.5 ? 1 : -1;
+            blackoutTimer = 0; strobeTimer = 0; hotZoneRadius = 5; crushAmount = 0;
+            doppel.x = canvas.width - player.x - player.size; doppel.y = canvas.height - player.y - player.size; doppel.size = player.size;
 
             if (selectedMode === 'eater') player.size = 15; 
             if (selectedMode === 'vampire') player.energy = 100;
@@ -2767,15 +3396,21 @@
             isPaused = false;
             
             gameOverScreen.style.display = 'none';
+            const gameOverTitle = document.getElementById('gameOverTitle');
+            if (gameOverTitle) { gameOverTitle.innerText = 'YOU DIED'; gameOverTitle.style.color = '#ff4444'; }
             isRunning = true;
+            if (selectedMode === 'bossfight') initBossFight();
             
             const storageKey = `redCubeHigh_${selectedMode}_${selectedDifficulty}`;
             const currentHigh = localStorage.getItem(storageKey) || 0;
-            const unit = (['survival', 'ricochet', 'tactical', 'minefield', 'ghost', 'swarm', 'freeze', 'orbit', 'laser', 'titan', 'gravity', 'twin', 'blink', 'reverse', 'darkness', 'decoy', 'speedster', 'slowmo', 'repel', 'wrap', 'shield', 'drift', 'teleport', 'volatile', 'splitter', 'trail', 'dash', 'sentry', 'builder', 'sniper', 'charge', 'necro', 'pinball', 'swap', 'graze', 'stomp', 'rewind', 'growth', 'vortex', 'meteor', 'assassin', 'berserker', 'chaos', 'hunter', 'nova', 'pulse', 'phase', 'mirror', 'glass', 'giant', 'frenzy', 'snare', 'timewarp', 'bouncer', 'pacifist', 'surge', 'rage', 'magnetstorm', 'phantom', 'laststand'].includes(selectedMode)) ? 's' : '';
+            const unit = (survivalScoreModes.has(selectedMode)) ? 's' : '';
             highScoreEl.innerText = `Best (${modes[selectedMode].label}/${difficulties[selectedDifficulty].label}): ${currentHigh}${unit}`;
             
             loop();
         }
+
+        loadBossProgress();
+        updateBossUnlockUI();
 
         const initialKey = `redCubeHigh_survival_medium`;
         const savedHigh = localStorage.getItem(initialKey) || 0;
