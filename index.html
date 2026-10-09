@@ -626,11 +626,36 @@
         let bossFightState = {
             active:false, x:0, y:0, size:118, hp:0, maxHp:0, phase:1,
             attackTimer:0, dashTimer:0, laserTimer:0, shockTimer:0, minionTimer:0, bossDashCooldown:0,
-            hitFlash:0, contactCooldown:0, enrageFlash:0, vx:0, vy:0, laserAngle:0, defeated:false
+            hitFlash:0, contactCooldown:0, enrageFlash:0, vx:0, vy:0, laserAngle:0, defeated:false,
+            dashFrames:0, coreOpenTimer:0, coreCycleTimer:180, strikeTimer:170, announcementText:'', announcementTimer:0, minionKills:0
         };
         let bossProjectiles = [];
         let bossLasers = [];
         let bossRings = [];
+        let bossWarnings = [];
+        let bossPickups = [];
+
+        function bossAnnounce(text, frames=90) {
+            bossFightState.announcementText = text;
+            bossFightState.announcementTimer = frames;
+        }
+
+        function bossTelegraphStrike(count=1) {
+            const px = player.x + player.size / 2, py = player.y + player.size / 2;
+            for (let i = 0; i < count; i++) {
+                const spread = count === 1 ? 0 : (i - (count - 1) / 2) * 105;
+                const xMargin = Math.min(52, Math.max(8, canvas.width / 2 - 1));
+                const yMargin = Math.min(70, Math.max(8, canvas.height / 2 - 1));
+                const x = Math.max(xMargin, Math.min(canvas.width - xMargin, px + spread + (Math.random() - .5) * 60));
+                const y = Math.max(yMargin, Math.min(canvas.height - yMargin, py + (Math.random() - .5) * 135));
+                bossWarnings.push({x, y, radius:66, timer:52, maxTimer:52, damage:30});
+            }
+        }
+
+        function spawnBossPickup(x, y) {
+            bossPickups.push({x, y, size:14, life:650, pulse:0});
+            if (bossPickups.length > 4) bossPickups.shift();
+        }
 
         function loadBossProgress() {
             try {
@@ -830,10 +855,10 @@
             countdown: { label: "Countdown", desc: "A timer constantly falls. Grab green orbs to add precious seconds.", hint: "Collect orbs before time hits zero" },
             suddenrush: { label: "Sudden Rush", desc: "Every few seconds all enemies lunge toward your current position.", hint: "Prepare for the lunge" },
             doppelganger: { label: "Doppelganger", desc: "A dangerous shadow copies your movement across the arena.", hint: "Do not collide with your shadow" },
-            bossfight: { label: "Boss Fight", desc: "Battle the Crimson Overlord through three escalating phases of lasers, volleys, shockwaves, dashes, and reinforcements.", hint: "WASD / Arrows • Click or Space to fire • Dash through attacks" }
+            bossfight: { label: "Boss Fight", desc: "Face the Crimson Overlord through three phases of radial barrages, telegraphed ground strikes, homing seeker orbs, charging lasers, shockwaves, minions, and a vulnerable core. Collect healing shards and dash through danger.", hint: "WASD / Arrows to move • Click / Space to fire • Shift to dash • Dodge marked zones • Hit the cyan core for bonus damage" }
         };
 
-        const survivalScoreModes = new Set(Object.keys(modes).filter(m => m !== 'collector' && m !== 'blaster' && m !== 'bossfight'));
+        const survivalScoreModes = new Set(Object.keys(modes).filter(m => !['collector', 'blaster', 'bossfight', 'magnetstorm', 'bossrush'].includes(m)));
 
         // Entities
         const player = {
@@ -1045,7 +1070,7 @@
 
         function handleAbility() {
             // Updated to ensure weapon enabled modes can shoot
-            if (['blaster', 'pvp', 'necro', 'splitter', 'volatile', 'trail', 'growth', 'meteor', 'vortex', 'assassin', 'bossfight'].includes(selectedMode)) spawnBullet();
+            if (['blaster', 'pvp', 'necro', 'splitter', 'volatile', 'trail', 'growth', 'meteor', 'vortex', 'assassin', 'bossfight', 'bossrush', 'bodyguard'].includes(selectedMode)) spawnBullet();
             if (selectedMode === 'nova') triggerNova();
             if (selectedMode === 'chameleon') toggleChameleonColor();
             if (selectedMode === 'bomber') dropBomb();
@@ -1107,7 +1132,7 @@
 
         joystickZone.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            if ((['blaster','chameleon','bomber','freeze','blink','decoy','boxer','pvp','dash','sentry','builder','sniper','charge','necro','splitter','volatile','swap','stomp','rewind','nova','assassin','hunter'].includes(selectedMode)) && e.changedTouches.length > 0) {
+            if ((['blaster','chameleon','bomber','freeze','blink','decoy','boxer','pvp','dash','sentry','builder','sniper','charge','necro','splitter','volatile','swap','stomp','rewind','nova','assassin','hunter','bossfight','bossrush','bodyguard'].includes(selectedMode)) && e.changedTouches.length > 0) {
                  const t = e.changedTouches[0];
                  if (t.clientY < window.innerHeight - 150) {
                      mouse.x = t.clientX;
@@ -1270,14 +1295,13 @@
                 angle = Math.atan2(mouse.y - centerY, mouse.x - centerX);
             }
             
-            bullets.push({
-                x: centerX,
-                y: centerY,
-                vx: Math.cos(angle) * 15,
-                vy: Math.sin(angle) * 15,
-                size: 6,
-                color: '#ffff00'
-            });
+            if (selectedMode === 'assassin') {
+                for (const spread of [-0.12, 0, 0.12]) bullets.push({
+                    x: centerX, y: centerY, vx: Math.cos(angle + spread) * 19, vy: Math.sin(angle + spread) * 19, size: 7, color: '#ff4055'
+                });
+            } else {
+                bullets.push({ x: centerX, y: centerY, vx: Math.cos(angle) * 15, vy: Math.sin(angle) * 15, size: 6, color: '#ffff00' });
+            }
         }
 
         function killEnemy(index) {
@@ -1466,10 +1490,10 @@
             bossFightState.maxHp = 7200;
             bossFightState.phase = 1;
             bossFightState.attackTimer = 70;
-            bossFightState.dashTimer = 180;
-            bossFightState.laserTimer = 260;
-            bossFightState.shockTimer = 145;
-            bossFightState.minionTimer = 300;
+            bossFightState.dashTimer = 175;
+            bossFightState.laserTimer = 210;
+            bossFightState.shockTimer = 125;
+            bossFightState.minionTimer = 240;
             bossFightState.hitFlash = 0;
             bossFightState.contactCooldown = 0;
             bossFightState.enrageFlash = 0;
@@ -1477,9 +1501,19 @@
             bossFightState.vy = 0;
             bossFightState.laserAngle = 0;
             bossFightState.defeated = false;
+            bossFightState.dashFrames = 0;
+            bossFightState.coreOpenTimer = 0;
+            bossFightState.coreCycleTimer = 170;
+            bossFightState.strikeTimer = 190;
+            bossFightState.announcementText = 'CRIMSON OVERLORD AWAKENS';
+            bossFightState.announcementTimer = 120;
+            bossFightState.minionKills = 0;
             bossProjectiles = [];
             bossLasers = [];
             bossRings = [];
+            bossWarnings = [];
+            bossPickups = [];
+            bossAnnounce('CRIMSON OVERLORD AWAKENS', 120);
             enemies = [];
             bullets = [];
             player.hp = 150;
@@ -1506,13 +1540,13 @@
             createExplosion(player.x + player.size / 2, player.y + player.size / 2, '#a7f3ff', 12);
         }
 
-        function bossAimBullet(speed, size, spread) {
+        function bossAimBullet(speed, size, spread, homing=false) {
             const bx = bossFightState.x + bossFightState.size / 2;
             const by = bossFightState.y + bossFightState.size / 2;
             const px = player.x + player.size / 2;
             const py = player.y + player.size / 2;
             const angle = Math.atan2(py - by, px - bx) + spread;
-            bossProjectiles.push({x:bx,y:by,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,size,life:260,color:'#ff4055'});
+            bossProjectiles.push({x:bx,y:by,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,size,life:260,color:homing?'#c5a4ff':'#ff4055',homing,homingSpeed:speed});
         }
 
         function bossRadialBurst(count, speed) {
@@ -1565,16 +1599,67 @@
             if(bossFightState.hitFlash>0)bossFightState.hitFlash--;if(bossFightState.contactCooldown>0)bossFightState.contactCooldown--;if(bossFightState.enrageFlash>0)bossFightState.enrageFlash--;
             const ratio=bossFightState.hp/bossFightState.maxHp;
             const nextPhase=ratio<=.32?3:(ratio<=.68?2:1);
-            if(nextPhase!==bossFightState.phase){bossFightState.phase=nextPhase;bossFightState.enrageFlash=36;bossRadialBurst(nextPhase===3?28:20,nextPhase===3?6.2:5.4);createExplosion(bossFightState.x+bossFightState.size/2,bossFightState.y+bossFightState.size/2,'#fff',55);}
+            if(nextPhase!==bossFightState.phase){bossFightState.phase=nextPhase;bossFightState.enrageFlash=45;bossRadialBurst(nextPhase===3?32:22,nextPhase===3?6.5:5.5);createExplosion(bossFightState.x+bossFightState.size/2,bossFightState.y+bossFightState.size/2,'#fff',65);bossAnnounce(nextPhase===2?'PHASE II — THE OVERLORD IS ENRAGED':'FINAL PHASE — DODGE EVERYTHING',150);bossFightState.strikeTimer=90;bossFightState.coreCycleTimer=95;}
 
             const bx=bossFightState.x+bossFightState.size/2,by=bossFightState.y+bossFightState.size/2,px=player.x+player.size/2,py=player.y+player.size/2;
             const target=Math.atan2(py-by,px-bx),strafe=Math.sin(frameCount*(.018+bossFightState.phase*.004))*1.35,moveSpeed=1.55+bossFightState.phase*.65;
-            bossFightState.vx+=Math.cos(target)*.06+Math.cos(target+Math.PI/2)*strafe*.012;
-            bossFightState.vy+=Math.sin(target)*.06+Math.sin(target+Math.PI/2)*strafe*.012;
-            const vel=Math.hypot(bossFightState.vx,bossFightState.vy)||1;
-            bossFightState.vx=bossFightState.vx/vel*moveSpeed;bossFightState.vy=bossFightState.vy/vel*moveSpeed;
-            if(bossFightState.dashTimer<=0&&bossFightState.phase>=2){const a=Math.atan2(py-by,px-bx);bossFightState.vx=Math.cos(a)*(8.5+bossFightState.phase);bossFightState.vy=Math.sin(a)*(8.5+bossFightState.phase);bossRadialBurst(bossFightState.phase===3?20:14,4.6+bossFightState.phase);createExplosion(bx,by,'#ff2233',30);bossFightState.dashTimer=bossFightState.phase===3?130:180;}
+            if (bossFightState.dashFrames > 0) {
+                bossFightState.dashFrames--;
+                // Keep dash velocity for several frames so this is a readable, dodgeable attack.
+                bossFightState.vx *= 0.96; bossFightState.vy *= 0.96;
+            } else {
+                bossFightState.vx+=Math.cos(target)*.06+Math.cos(target+Math.PI/2)*strafe*.012;
+                bossFightState.vy+=Math.sin(target)*.06+Math.sin(target+Math.PI/2)*strafe*.012;
+                const vel=Math.hypot(bossFightState.vx,bossFightState.vy)||1;
+                bossFightState.vx=bossFightState.vx/vel*moveSpeed;bossFightState.vy=bossFightState.vy/vel*moveSpeed;
+                if(bossFightState.dashTimer<=0&&bossFightState.phase>=2){
+                    const a=Math.atan2(py-by,px-bx);
+                    bossFightState.vx=Math.cos(a)*(8.2+bossFightState.phase*1.1);bossFightState.vy=Math.sin(a)*(8.2+bossFightState.phase*1.1);
+                    bossFightState.dashFrames=bossFightState.phase===3?22:17;
+                    bossRadialBurst(bossFightState.phase===3?20:14,4.6+bossFightState.phase);
+                    createExplosion(bx,by,'#ff2233',30);
+                    bossFightState.dashTimer=bossFightState.phase===3?128:172;
+                    bossFightState.coreOpenTimer=Math.max(bossFightState.coreOpenTimer,55);
+                    bossAnnounce('OVERLORD DASH — GET CLEAR!',55);
+                }
+            }
             bossFightState.x+=bossFightState.vx;bossFightState.y+=bossFightState.vy;
+            // The glowing core periodically opens; use the window to deal bonus damage.
+            if (bossFightState.announcementTimer > 0) bossFightState.announcementTimer--;
+            if (bossFightState.coreOpenTimer > 0) bossFightState.coreOpenTimer--;
+            if (bossFightState.coreCycleTimer > 0) bossFightState.coreCycleTimer--;
+            if (bossFightState.coreCycleTimer <= 0 && bossFightState.coreOpenTimer <= 0) {
+                bossFightState.coreOpenTimer = bossFightState.phase === 3 ? 68 : 78;
+                bossFightState.coreCycleTimer = bossFightState.phase === 3 ? 235 : (bossFightState.phase === 2 ? 265 : 295);
+                bossAnnounce('CORE EXPOSED — HIT IT NOW!',85);
+                createExplosion(bx,by,'#58f4ff',25);
+            }
+            // Telegraph ground strikes before the impact frames.
+            bossFightState.strikeTimer--;
+            if (bossFightState.strikeTimer <= 0) {
+                const strikeCount = bossFightState.phase === 3 ? 3 : (bossFightState.phase === 2 ? 2 : 1);
+                bossTelegraphStrike(strikeCount);
+                bossAnnounce(bossFightState.phase === 3 ? 'TRIPLE GROUND STRIKE — KEEP MOVING!' : 'GROUND STRIKE — LEAVE THE MARKED ZONES!',70);
+                bossFightState.strikeTimer = bossFightState.phase === 3 ? 145 : (bossFightState.phase === 2 ? 195 : 245);
+            }
+            for (let i = bossWarnings.length - 1; i >= 0; i--) {
+                const w = bossWarnings[i]; w.timer--;
+                if (w.timer <= 0) {
+                    createExplosion(w.x,w.y,'#ff9636',32);
+                    const d = Math.hypot(px-w.x,py-w.y);
+                    if (d < w.radius + player.size/2 && !godMode && !player.isDashing) {
+                        player.hp -= w.damage;
+                        bossAnnounce('GROUND STRIKE HIT — KEEP MOVING!',55);
+                        if (player.hp <= 0) { gameOver(); return; }
+                    }
+                    bossWarnings.splice(i,1);
+                }
+            }
+            // Phase three seeker shots turn slowly toward the player.
+            if (bossFightState.phase === 3 && frameCount % 175 === 0) {
+                bossAimBullet(4.35,10,-0.12,true); bossAimBullet(4.35,10,0.12,true);
+                bossAnnounce('SEEKER ORBS — BREAK THEIR CURVE!',65);
+            }
             const margin=34;
             if(bossFightState.x<margin){bossFightState.x=margin;bossFightState.vx*=-1;}
             if(bossFightState.x>canvas.width-bossFightState.size-margin){bossFightState.x=canvas.width-bossFightState.size-margin;bossFightState.vx*=-1;}
@@ -1588,10 +1673,10 @@
             }
             if(bossFightState.phase>=2){
                 bossFightState.laserAngle+=.012+bossFightState.phase*.004;
-                if(bossFightState.laserTimer<=0){bossLasers.push({angle:bossFightState.laserAngle,timer:38,width:bossFightState.phase===3?10:7,hitCooldown:0});bossFightState.laserTimer=bossFightState.phase===3?105:145;}
+                if(bossFightState.laserTimer<=0){bossLasers.push({angle:bossFightState.laserAngle,timer:58,warmup:20,width:bossFightState.phase===3?10:7,hitCooldown:0});bossFightState.laserTimer=bossFightState.phase===3?112:150;bossAnnounce('LASER LOCK — DASH OR MOVE!',60);}
             }
             if(bossFightState.phase>=2&&bossFightState.shockTimer<=0){bossRing(bossFightState.phase===3?13:9);bossFightState.shockTimer=bossFightState.phase===3?95:145;}
-            if(bossFightState.phase===3&&bossFightState.minionTimer<=0){spawnBossMinion();spawnBossMinion();bossFightState.minionTimer=170;}
+            if(bossFightState.phase>=2&&bossFightState.minionTimer<=0){spawnBossMinion();if(bossFightState.phase===3)spawnBossMinion();bossFightState.minionTimer=bossFightState.phase===3?155:245;}
 
             if(bossFightState.x<player.x+player.size&&bossFightState.x+bossFightState.size>player.x&&bossFightState.y<player.y+player.size&&bossFightState.y+bossFightState.size>player.y&&bossFightState.contactCooldown<=0){
                 if(!godMode&&!player.isDashing)player.hp-=18;bossFightState.contactCooldown=18;
@@ -1599,7 +1684,15 @@
             }
 
             for(let i=bossProjectiles.length-1;i>=0;i--){
-                const b=bossProjectiles[i];b.x+=b.vx;b.y+=b.vy;b.life--;
+                const b=bossProjectiles[i];
+                if (b.homing && b.life < 225) {
+                    const desired = Math.atan2(player.y + player.size/2 - b.y, player.x + player.size/2 - b.x);
+                    const current = Math.atan2(b.vy, b.vx);
+                    let diff = desired - current; while (diff > Math.PI) diff -= Math.PI*2; while (diff < -Math.PI) diff += Math.PI*2;
+                    const a = current + Math.max(-0.055, Math.min(0.055, diff));
+                    b.vx = Math.cos(a) * b.homingSpeed; b.vy = Math.sin(a) * b.homingSpeed;
+                }
+                b.x+=b.vx;b.y+=b.vy;b.life--;
                 if(b.life<=0||b.x<-50||b.x>canvas.width+50||b.y<-50||b.y>canvas.height+50){bossProjectiles.splice(i,1);continue;}
                 if(player.x<b.x+b.size&&player.x+player.size>b.x&&player.y<b.y+b.size&&player.y+player.size>b.y){
                     if(!godMode&&!player.isDashing)player.hp-=10;bossProjectiles.splice(i,1);createExplosion(b.x,b.y,'#ff4055',7);if(player.hp<=0&&!godMode){gameOver();return;}
@@ -1607,9 +1700,9 @@
             }
             const pcx=player.x+player.size/2,pcy=player.y+player.size/2;
             for(let i=bossRings.length-1;i>=0;i--){const r=bossRings[i];r.radius+=r.speed;r.life--;const d=Math.hypot(pcx-r.x,pcy-r.y);if(!r.hit&&Math.abs(d-r.radius)<10){r.hit=true;if(!godMode&&!player.isDashing)player.hp-=13;if(player.hp<=0&&!godMode){gameOver();return;}}if(r.life<=0)bossRings.splice(i,1);}
-            for(let i=bossLasers.length-1;i>=0;i--){const l=bossLasers[i];l.timer--;if(l.hitCooldown>0)l.hitCooldown--;if(l.timer<=0){bossLasers.splice(i,1);continue;}const d=distanceToSegment(pcx,pcy,bx,by,bx+Math.cos(l.angle)*1500,by+Math.sin(l.angle)*1500);if(d<l.width+player.size*.45&&!godMode&&!player.isDashing&&l.hitCooldown<=0){player.hp-=bossFightState.phase===3?7:4;l.hitCooldown=10;if(player.hp<=0){gameOver();return;}}}
+            for(let i=bossLasers.length-1;i>=0;i--){const l=bossLasers[i];l.timer--;if(l.warmup>0)l.warmup--;if(l.hitCooldown>0)l.hitCooldown--;if(l.timer<=0){bossLasers.splice(i,1);continue;}const d=distanceToSegment(pcx,pcy,bx,by,bx+Math.cos(l.angle)*1500,by+Math.sin(l.angle)*1500);if(l.warmup<=0&&d<l.width+player.size*.45&&!godMode&&!player.isDashing&&l.hitCooldown<=0){player.hp-=bossFightState.phase===3?7:4;l.hitCooldown=10;if(player.hp<=0){gameOver();return;}}}
 
-            for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];if(b.x>bossFightState.x&&b.x<bossFightState.x+bossFightState.size&&b.y>bossFightState.y&&b.y<bossFightState.y+bossFightState.size){bossFightState.hp=Math.max(0,bossFightState.hp-30);bossFightState.hitFlash=5;currentScore+=30;bullets.splice(i,1);createExplosion(b.x,b.y,'#ffff66',6);if(bossFightState.hp<=0){bossVictory();return;}}}
+            for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];if(b.x>bossFightState.x&&b.x<bossFightState.x+bossFightState.size&&b.y>bossFightState.y&&b.y<bossFightState.y+bossFightState.size){const coreX=bossFightState.x+bossFightState.size/2,coreY=bossFightState.y+bossFightState.size/2;const coreHit=bossFightState.coreOpenTimer>0&&Math.hypot(b.x-coreX,b.y-coreY)<bossFightState.size*.28;const damage=coreHit?125:30;bossFightState.hp=Math.max(0,bossFightState.hp-damage);bossFightState.hitFlash=5;currentScore+=damage;bullets.splice(i,1);createExplosion(b.x,b.y,coreHit?'#58f4ff':'#ffff66',coreHit?16:6);if(bossFightState.hp<=0){bossVictory();return;}}}
         }
 
         function updateBossFightMode(elapsed) {
@@ -1636,7 +1729,10 @@
             player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
             player.y = Math.max(0, Math.min(canvas.height - player.size - 30, player.y));
 
-            // Advance player shots and let them hit phase-three minions before the boss check.
+            // Hold mouse to fire an automatic stream during Boss Fight; click/Space still fires instantly.
+            if (mouse.down && frameCount % 8 === 0) spawnBullet();
+
+            // Advance player shots and let them hit phase-two/three minions before the boss check.
             for (let i = bullets.length - 1; i >= 0; i--) {
                 const b = bullets[i];
                 b.x += b.vx; b.y += b.vy;
@@ -1650,7 +1746,11 @@
                         e.hp = (e.hp == null ? 120 : e.hp) - 60;
                         bullets.splice(i, 1); hitMinion = true;
                         createExplosion(b.x, b.y, '#ffb1b7', 5);
-                        if (e.hp <= 0) { createExplosion(e.x + e.size / 2, e.y + e.size / 2, e.color || '#a91f2b', 12); enemies.splice(j, 1); }
+                        if (e.hp <= 0) {
+                            createExplosion(e.x + e.size / 2, e.y + e.size / 2, e.color || '#a91f2b', 12);
+                            enemies.splice(j, 1); bossFightState.minionKills++;
+                            if (bossFightState.minionKills % 2 === 0) spawnBossPickup(e.x + e.size/2, e.y + e.size/2);
+                        }
                         break;
                     }
                 }
@@ -1664,9 +1764,22 @@
                 const spd = Math.min(3.2, e.speed || 2.3);
                 e.x += Math.cos(a) * spd;
                 e.y += Math.sin(a) * spd;
-                if (e.x < player.x + player.size && e.x + e.size > player.x && e.y < player.y + player.size && e.y + e.size > player.y) {
-                    if (!godMode && !player.isDashing) player.hp -= 0.8;
+                e.contactCooldown = Math.max(0, (e.contactCooldown || 0) - 1);
+                if (e.x < player.x + player.size && e.x + e.size > player.x && e.y < player.y + player.size && e.y + e.size > player.y && e.contactCooldown <= 0) {
+                    if (!godMode && !player.isDashing) player.hp -= 7;
+                    e.contactCooldown = 34;
                     if (player.hp <= 0 && !godMode) { gameOver(); return; }
+                }
+            }
+
+            // Collect healing shards dropped by every second defeated minion.
+            for (let i = bossPickups.length - 1; i >= 0; i--) {
+                const p = bossPickups[i]; p.life--; p.pulse += 0.14;
+                if (p.life <= 0) { bossPickups.splice(i, 1); continue; }
+                if (Math.hypot(player.x + player.size/2 - p.x, player.y + player.size/2 - p.y) < player.size/2 + p.size) {
+                    player.hp = Math.min(player.maxHp, player.hp + 25);
+                    createExplosion(p.x, p.y, '#65ff9a', 20);
+                    bossPickups.splice(i, 1); bossAnnounce('CORE SHARD COLLECTED +25 HP',65);
                 }
             }
 
@@ -1695,7 +1808,9 @@
             }
             
             // Score Display
-            if (survivalScoreModes.has(selectedMode)) {
+            if (selectedMode === 'countdown') {
+                scoreEl.textContent = `TIME ${Math.max(0, countdownTime).toFixed(1)}s`;
+            } else if (survivalScoreModes.has(selectedMode)) {
                 scoreEl.textContent = elapsed.toFixed(1) + "s";
             } else {
                 scoreEl.textContent = (selectedMode === 'bossfight' && bossFightState.active)
@@ -1899,7 +2014,10 @@
                 spawnEnemy();
             }
 
-            if ((['collector','snake','eater','titan','vampire','magnet','magnetstorm','countdown'].includes(selectedMode)) && orbs.length === 0) {
+            if (selectedMode === 'magnetstorm') {
+                if (frameCount % 85 === 0 && orbs.length < 7) spawnOrb();
+                if (orbs.length === 0) spawnOrb();
+            } else if ((['collector','snake','eater','titan','vampire','magnet','countdown'].includes(selectedMode)) && orbs.length === 0) {
                 spawnOrb();
             }
 
@@ -2177,13 +2295,14 @@
             if (selectedMode === 'floorlava') {
                 if(frameCount%100===0&&lavaZones.length<3){
                     const horizontal=Math.random()>0.5;
-                    lavaZones.push(horizontal?{x:0,y:Math.random()*canvas.height,w:canvas.width,h:32,timer:330}:{x:Math.random()*canvas.width,y:0,w:32,h:canvas.height,timer:330});
+                    lavaZones.push(horizontal?{x:0,y:Math.random()*Math.max(1,canvas.height-32),w:canvas.width,h:32,timer:330,damaging:false}:{x:Math.random()*Math.max(1,canvas.width-32),y:0,w:32,h:canvas.height,timer:330,damaging:false});
                 }
-                for(let i=lavaZones.length-1;i>=0;i--){const z=lavaZones[i];z.timer--;if(z.timer<=0){lavaZones.splice(i,1);continue;}if(player.x<z.x+z.w&&player.x+player.size>z.x&&player.y<z.y+z.h&&player.y+player.size>z.y&&!godMode&&!player.isDashing)gameOver();}
+                for(let i=lavaZones.length-1;i>=0;i--){const z=lavaZones[i];z.timer--;if(z.timer<=0){lavaZones.splice(i,1);continue;}if(z.timer<=275)z.damaging=true;if(z.damaging&&player.x<z.x+z.w&&player.x+player.size>z.x&&player.y<z.y+z.h&&player.y+player.size>z.y&&!godMode&&!player.isDashing)gameOver();}
             }
 
             if (selectedMode === 'hotzone') {
-                if(Math.hypot(player.dx,player.dy)<0.05) hotZoneRadius=Math.min(230,hotZoneRadius+0.9); else hotZoneRadius=Math.max(45,hotZoneRadius-0.18);
+                const hotZoneLimit = Math.min(230, Math.min(canvas.width, canvas.height) * 0.42);
+                if(Math.hypot(player.dx,player.dy)<0.05) hotZoneRadius=Math.min(hotZoneLimit,hotZoneRadius+0.9); else hotZoneRadius=Math.max(Math.min(45,hotZoneLimit),hotZoneRadius-0.18);
                 const d=Math.hypot(player.x+player.size/2-canvas.width/2,player.y+player.size/2-canvas.height/2);
                 if(d<hotZoneRadius&&!godMode) gameOver();
             }
@@ -2232,8 +2351,13 @@
                 createExplosion(player.x+player.size/2,player.y+player.size/2,'#ff8800',18);
             }
             if (selectedMode === 'doppelganger') {
-                doppel.x=canvas.width-player.x-player.size; doppel.y=canvas.height-player.y-player.size; doppel.size=player.size;
-                if(player.x<doppel.x+doppel.size&&player.x+player.size>doppel.x&&player.y<doppel.y+doppel.size&&player.y+player.size>doppel.y&&!godMode) gameOver();
+                const oldPose = doppel.history.length >= doppel.delay ? doppel.history.shift() : null;
+                doppel.history.push({ x: player.x, y: player.y, size: player.size });
+                if (oldPose) {
+                    doppel.x = oldPose.x; doppel.y = oldPose.y; doppel.size = oldPose.size; doppel.ready = true;
+                    if (player.x < doppel.x + doppel.size && player.x + player.size > doppel.x &&
+                        player.y < doppel.y + doppel.size && player.y + player.size > doppel.y && !godMode) gameOver();
+                } else { doppel.ready = false; }
             }
 
             // Enemies Loop
@@ -2561,7 +2685,7 @@
 
                 // Player Collision
                 if (player.x < e.x + e.size && player.x + player.size > e.x &&
-                    player.y < e.y + e.size && player.y + player.size > e.y) {
+                    player.y < e.y + e.size && player.y + player.size > e.y && !(selectedMode === 'phase' && player.phaseTimer > 90)) {
                     
                     if (player.isDashing || player.isStomping) {
                         // Dash/Stomp kills enemies
@@ -2637,12 +2761,18 @@
                         
                         if (selectedMode === 'pvp') {
                             e.hp -= 10;
-                            createExplosion(b.x, b.y, '#ffff00', 3); 
+                            createExplosion(b.x, b.y, '#ffff00', 3);
                             if (e.hp <= 0) {
-                                createExplosion(e.x + e.size/2, e.y + e.size/2, e.color, 20); 
-                                enemies.splice(i, 1);
-                                currentScore++;
-                                player.hp = Math.min(player.maxHp, player.hp + 20); 
+                                createExplosion(e.x + e.size/2, e.y + e.size/2, e.color, 20);
+                                enemies.splice(i, 1); currentScore++; player.hp = Math.min(player.maxHp, player.hp + 20);
+                            }
+                        } else if (selectedMode === 'bossrush' || (selectedMode === 'bodyguard' && e.guardian)) {
+                            e.hp = (e.hp == null ? (e.guardian ? 1200 : 900) : e.hp) - (e.guardian ? 90 : 85);
+                            createExplosion(b.x, b.y, '#ffd166', 5);
+                            if (e.hp <= 0) {
+                                createExplosion(e.x + e.size/2, e.y + e.size/2, e.color, 30);
+                                enemies.splice(i, 1); currentScore += 1;
+                                if (selectedMode === 'bodyguard' && e.guardian) player.hp = Math.min(player.maxHp, player.hp + 15);
                             }
                         } else {
                             killEnemy(i);
@@ -2680,7 +2810,7 @@
             }
 
             // Update Orbs
-            if (['collector', 'snake', 'eater', 'titan', 'vampire', 'magnet'].includes(selectedMode)) {
+            if (['collector', 'snake', 'eater', 'titan', 'vampire', 'magnet', 'magnetstorm', 'countdown'].includes(selectedMode)) {
                 for (let i = orbs.length - 1; i >= 0; i--) {
                     let orb = orbs[i];
                     orb.pulse += 0.1; 
@@ -3042,7 +3172,8 @@
             ctx.fillStyle = '#ffff00';
             for (let b of bullets) {
                 ctx.shadowBlur = 5;
-                ctx.shadowColor = '#ffff00';
+                ctx.shadowColor = b.color || '#ffff00';
+                ctx.fillStyle = b.color || '#ffff00';
                 ctx.beginPath();
                 ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
                 ctx.fill();
@@ -3148,11 +3279,11 @@
             if (selectedMode === 'lightning') { for(const l of lightningStrikes){ctx.strokeStyle=`rgba(255,255,0,${Math.max(.2,l.timer/55)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(l.x,l.y,65,0,Math.PI*2);ctx.stroke();} }
             if (selectedMode === 'crossfire' || selectedMode === 'rainfire') { ctx.fillStyle='#ffcc00'; for(const b of enemyBullets){ctx.beginPath();ctx.arc(b.x,b.y,b.size,0,Math.PI*2);ctx.fill();} }
             if (selectedMode === 'shockwave') { for(const w of shockwaves){ctx.strokeStyle=`rgba(0,255,255,${Math.max(0,w.life/120)})`;ctx.lineWidth=4;ctx.beginPath();ctx.arc(w.x,w.y,w.radius,0,Math.PI*2);ctx.stroke();} }
-            if (selectedMode === 'floorlava') { ctx.fillStyle='rgba(255,70,0,0.35)'; for(const z of lavaZones)ctx.fillRect(z.x,z.y,z.w,z.h); }
+            if (selectedMode === 'floorlava') { for(const z of lavaZones){ctx.fillStyle=z.damaging?'rgba(255,55,0,0.42)':'rgba(255,205,0,0.22)';ctx.fillRect(z.x,z.y,z.w,z.h);ctx.strokeStyle=z.damaging?'#ff3b12':'#ffd166';ctx.lineWidth=2;ctx.strokeRect(z.x,z.y,z.w,z.h);} }
             if (selectedMode === 'crush') { ctx.fillStyle='rgba(255,0,0,0.20)';ctx.fillRect(0,0,canvas.width,crushAmount);ctx.fillRect(0,canvas.height-crushAmount,canvas.width,crushAmount);ctx.fillRect(0,0,crushAmount,canvas.height);ctx.fillRect(canvas.width-crushAmount,0,crushAmount,canvas.height); }
             if (selectedMode === 'movingwalls') { ctx.fillStyle='rgba(68,136,255,0.30)';ctx.strokeStyle='#4488ff'; for(const w of movingWalls){ctx.fillRect(w.x,w.y,w.w,w.h);ctx.strokeRect(w.x,w.y,w.w,w.h);} }
             if (selectedMode === 'hotzone') { ctx.fillStyle='rgba(255,0,0,0.18)';ctx.beginPath();ctx.arc(canvas.width/2,canvas.height/2,hotZoneRadius,0,Math.PI*2);ctx.fill(); }
-            if (selectedMode === 'doppelganger') { ctx.fillStyle='rgba(255,255,255,0.20)';ctx.strokeStyle='#fff';ctx.strokeRect(doppel.x,doppel.y,doppel.size,doppel.size);ctx.fillRect(doppel.x,doppel.y,doppel.size,doppel.size); }
+            if (selectedMode === 'doppelganger') { ctx.save();ctx.fillStyle=doppel.ready?'rgba(255,55,75,0.34)':'rgba(255,255,255,0.12)';ctx.strokeStyle=doppel.ready?'#ff4055':'#aab0c0';ctx.lineWidth=2;ctx.setLineDash(doppel.ready?[]:[5,5]);ctx.strokeRect(doppel.x,doppel.y,doppel.size,doppel.size);ctx.fillRect(doppel.x,doppel.y,doppel.size,doppel.size);ctx.setLineDash([]);if(!doppel.ready){ctx.fillStyle='#e7eaf0';ctx.font='bold 12px Segoe UI';ctx.textAlign='center';ctx.fillText('SHADOW FORMING',canvas.width/2,56);}ctx.restore(); }
             if (selectedMode === 'countdown') { ctx.fillStyle='#fff';ctx.font='bold 22px monospace';ctx.textAlign='center';ctx.fillText(Math.max(0,countdownTime).toFixed(1),canvas.width/2,38);ctx.textAlign='left'; }
             if (selectedMode === 'blackout' && blackoutTimer>240) {
                 ctx.fillStyle='rgba(0,0,0,0.95)';ctx.fillRect(0,0,canvas.width,canvas.height);const px=player.x+player.size/2,py=player.y+player.size/2;const g=ctx.createRadialGradient(px,py,25,px,py,165);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.95)');ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -3166,15 +3297,25 @@
                 ctx.fillStyle='rgba(40,0,8,.22)';ctx.fillRect(0,0,canvas.width,canvas.height);
                 for(const b of bossProjectiles){ctx.fillStyle=b.color;ctx.shadowColor=b.color;ctx.shadowBlur=12;ctx.beginPath();ctx.arc(b.x,b.y,b.size,0,Math.PI*2);ctx.fill();}
                 ctx.shadowBlur=0;
+                for (const w of bossWarnings) {
+                    const urgency = 1 - w.timer / w.maxTimer;
+                    ctx.save(); ctx.globalAlpha = .28 + urgency * .55; ctx.fillStyle = '#ff6b32'; ctx.beginPath(); ctx.arc(w.x,w.y,w.radius*(.85 + .15*Math.sin(Date.now()/70)),0,Math.PI*2); ctx.fill(); ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.setLineDash([8,6]); ctx.beginPath(); ctx.arc(w.x,w.y,w.radius,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle='#fff'; ctx.font='bold 11px Segoe UI'; ctx.textAlign='center'; ctx.fillText('MOVE!',w.x,w.y+4); ctx.restore();
+                }
+                for (const p of bossPickups) { const pulse=1+Math.sin(p.pulse)*.16; ctx.save(); ctx.translate(p.x,p.y); ctx.scale(pulse,pulse); ctx.shadowColor='#65ff9a';ctx.shadowBlur=18;ctx.fillStyle='#65ff9a';ctx.beginPath();ctx.arc(0,0,p.size,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#0b2a16';ctx.font='bold 15px Segoe UI';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('+',0,1);ctx.restore(); }
                 for(const r of bossRings){ctx.strokeStyle=`rgba(255,${bossFightState.phase===3?50:140},40,${Math.max(0,r.life/105)})`;ctx.lineWidth=bossFightState.phase===3?5:3;ctx.beginPath();ctx.arc(r.x,r.y,r.radius,0,Math.PI*2);ctx.stroke();}
-                for(const l of bossLasers){const a=Math.min(1,l.timer<10?l.timer/10:1);ctx.strokeStyle=`rgba(255,30,60,${a})`;ctx.lineWidth=l.width;ctx.shadowColor='#ff1638';ctx.shadowBlur=18;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+Math.cos(l.angle)*1500,by+Math.sin(l.angle)*1500);ctx.stroke();ctx.shadowBlur=0;}
+                for(const l of bossLasers){const a=Math.min(1,l.timer<10?l.timer/10:1);ctx.strokeStyle=l.warmup>0?`rgba(255,220,80,${.25+.6*(1-l.warmup/20)})`:`rgba(255,30,60,${a})`;ctx.lineWidth=l.warmup>0?2:l.width;ctx.shadowColor=l.warmup>0?'#ffd166':'#ff1638';ctx.shadowBlur=l.warmup>0?5:18;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+Math.cos(l.angle)*1500,by+Math.sin(l.angle)*1500);ctx.stroke();ctx.shadowBlur=0;}
                 ctx.save();ctx.translate(bx,by);ctx.rotate(Date.now()/900);ctx.strokeStyle=`rgba(255,40,60,${bossFightState.phase===3?.85:.6})`;ctx.lineWidth=4;ctx.shadowColor=phaseColor;ctx.shadowBlur=25;ctx.beginPath();ctx.arc(0,0,bossFightState.size*.82*pulse,0,Math.PI*2);ctx.stroke();ctx.rotate(Math.PI/4);ctx.beginPath();ctx.rect(-bossFightState.size*.68,-bossFightState.size*.68,bossFightState.size*1.36,bossFightState.size*1.36);ctx.stroke();ctx.restore();
-                const body=bossFightState.hitFlash>0?'#fff':phaseColor;ctx.fillStyle=body;ctx.shadowColor=phaseColor;ctx.shadowBlur=30;ctx.beginPath();ctx.arc(bx,by,bossFightState.size*.46,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#180005';ctx.beginPath();ctx.arc(bx,by,bossFightState.size*.22+Math.sin(Date.now()/90)*2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#ffd166';ctx.lineWidth=3;ctx.beginPath();ctx.arc(bx,by,bossFightState.size*.25,0,Math.PI*2);ctx.stroke();
+                const body=bossFightState.hitFlash>0?'#fff':phaseColor;ctx.fillStyle=body;ctx.shadowColor=phaseColor;ctx.shadowBlur=30;ctx.beginPath();ctx.arc(bx,by,bossFightState.size*.46,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle=bossFightState.coreOpenTimer>0?'#58f4ff':'#180005';ctx.shadowColor=bossFightState.coreOpenTimer>0?'#58f4ff':'#ff1638';ctx.shadowBlur=bossFightState.coreOpenTimer>0?32:8;ctx.beginPath();ctx.arc(bx,by,bossFightState.size*.22+Math.sin(Date.now()/90)*2,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle=bossFightState.coreOpenTimer>0?'#ffffff':'#ffd166';ctx.lineWidth=bossFightState.coreOpenTimer>0?5:3;ctx.beginPath();ctx.arc(bx,by,bossFightState.size*.25,0,Math.PI*2);ctx.stroke();
+                // Four spinning shards show the boss's phase and keep its silhouette animated.
+                for(let i=0;i<4;i++){const a=Date.now()/480+i*Math.PI/2,rr=bossFightState.size*.66;ctx.save();ctx.translate(bx+Math.cos(a)*rr,by+Math.sin(a)*rr);ctx.rotate(-a);ctx.fillStyle=phaseColor;ctx.strokeStyle='#ffd166';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,-9);ctx.lineTo(7,0);ctx.lineTo(0,9);ctx.lineTo(-7,0);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();}
                 const barW=Math.min(560,canvas.width*.62),barX=(canvas.width-barW)/2,barY=66;ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(barX-5,barY-5,barW+10,24);ctx.fillStyle='#4a0b13';ctx.fillRect(barX,barY,barW,14);ctx.fillStyle=phaseColor;ctx.fillRect(barX,barY,barW*(bossFightState.hp/bossFightState.maxHp),14);ctx.strokeStyle='#ffd166';ctx.lineWidth=2;ctx.strokeRect(barX,barY,barW,14);ctx.fillStyle='#fff';ctx.font='bold 13px Segoe UI';ctx.textAlign='center';ctx.fillText(`CRIMSON OVERLORD • PHASE ${bossFightState.phase}`,canvas.width/2,barY+34);ctx.textAlign='left';
-                if(bossFightState.enrageFlash>0){ctx.fillStyle=`rgba(255,20,40,${bossFightState.enrageFlash/120})`;ctx.fillRect(0,0,canvas.width,canvas.height);}
+                if(bossFightState.enrageFlash>0){ctx.fillStyle=`rgba(255,20,40,${bossFightState.enrageFlash/150})`;ctx.fillRect(0,0,canvas.width,canvas.height);}
+                if(bossFightState.announcementTimer>0&&bossFightState.announcementText){ctx.save();const alpha=Math.min(1,bossFightState.announcementTimer/16);ctx.globalAlpha=alpha;ctx.fillStyle='rgba(12,0,5,.72)';ctx.fillRect(0,canvas.height-82,canvas.width,34);ctx.fillStyle=bossFightState.coreOpenTimer>0?'#58f4ff':'#ffd166';ctx.font='bold 16px Segoe UI';ctx.textAlign='center';ctx.fillText(bossFightState.announcementText,canvas.width/2,canvas.height-60);ctx.restore();}
             }
 
             // Player
+            ctx.save();
+            if (selectedMode === 'phase' && player.phaseTimer > 90) ctx.globalAlpha = 0.35;
             ctx.shadowBlur = player.glow;
             ctx.shadowColor = player.color;
             ctx.fillStyle = player.color;
@@ -3201,6 +3342,7 @@
             if (!player.isStomping || player.stompTimer > 15) { // Hide player when slamming down? No, just keep vis
                 ctx.fillRect(player.x, player.y, player.size, player.size);
             }
+            ctx.restore();
             
             // Twin Player
             if (selectedMode === 'twin') {
@@ -3249,11 +3391,11 @@
                 ctx.shadowColor = e.color === '#ff4444' ? '#800000' : (e.color === '#44ff44' ? '#008800' : '#884400');
                 ctx.fillRect(e.x, e.y, e.size, e.size);
                 
-                if (selectedMode === 'pvp') {
-                    ctx.fillStyle = '#555';
-                    ctx.fillRect(e.x, e.y - 10, e.size, 4);
-                    ctx.fillStyle = '#ff4444';
-                    ctx.fillRect(e.x, e.y - 10, e.size * (e.hp/e.maxHp), 4);
+                if (selectedMode === 'pvp' || selectedMode === 'bossrush' || (selectedMode === 'bodyguard' && e.guardian) || (selectedMode === 'bossfight' && e.type === 'bossminion')) {
+                    ctx.fillStyle = '#24060a'; ctx.fillRect(e.x, e.y - 12, e.size, 5);
+                    ctx.fillStyle = e.guardian ? '#ffb347' : '#ff4444';
+                    ctx.fillRect(e.x, e.y - 12, e.size * Math.max(0, (e.hp || 0) / Math.max(1, e.maxHp || 1)), 5);
+                    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1; ctx.strokeRect(e.x, e.y - 12, e.size, 5);
                 }
 
                 ctx.globalAlpha = 1.0; 
@@ -3407,6 +3549,7 @@
             shockwaves = [];
             lavaZones = [];
             movingWalls = [];
+            bossWarnings = []; bossPickups = [];
             bossProjectiles = [];
             bossLasers = [];
             bossRings = [];
@@ -3449,6 +3592,8 @@
             railbeams = [];
             allies = [];
             meteors = [];
+            lightningStrikes = []; enemyBullets = []; shockwaves = []; lavaZones = []; movingWalls = [];
+            bossWarnings = []; bossPickups = [];
             
             player.x = canvas.width / 2 - player.size/2;
             player.y = canvas.height / 2 - player.size/2;
@@ -3456,6 +3601,10 @@
             player.size = 20;
             if (selectedMode === 'glass') player.size = 11;
             if (selectedMode === 'giant') player.size = 42;
+            if (selectedMode === 'hotzone') {
+                player.x = 36;
+                player.y = canvas.height / 2 - player.size / 2;
+            }
             player.velX = 0;
             player.velY = 0;
             player.isDashing = false;
@@ -3472,8 +3621,8 @@
             safeZone.vx = 1.2; safeZone.vy = 0.9;
             currentWindX = 0; currentWindY = 0;
             cornerTimer = 0; cornerX = Math.random() > 0.5 ? 1 : -1; cornerY = Math.random() > 0.5 ? 1 : -1;
-            blackoutTimer = 0; strobeTimer = 0; hotZoneRadius = 5; crushAmount = 0;
-            doppel.x = canvas.width - player.x - player.size; doppel.y = canvas.height - player.y - player.size; doppel.size = player.size;
+            blackoutTimer = 0; strobeTimer = 0; hotZoneRadius = 45; crushAmount = 0;
+            doppel = { x: 18, y: 18, size: player.size, history: [], delay: 105, ready: false };
 
             if (selectedMode === 'eater') player.size = 15; 
             if (selectedMode === 'vampire') player.energy = 100;
