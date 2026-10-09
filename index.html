@@ -106,12 +106,15 @@
         .story-chapter-card.completed .story-chapter-status { color:#36d990; }
         .story-chapter-card p { margin:6px 0 0; color:#aaa; font-size:12px; line-height:1.4; }
         #storyMenu { width: min(540px, 95vw); min-width: 0; border-color:#ffd166; }
-        #storyMenu h2 { color:#ffd166; margin-top:0; }
+        #storyMenu h2 { color:#ffd166; margin-top:0; letter-spacing:1.3px; text-shadow:0 0 18px rgba(255,209,102,.18); }
+        #storyMenu { background:linear-gradient(145deg,rgba(11,14,22,.98),rgba(19,5,12,.98)); }
+        #storyChapterList { max-height:38vh; overflow-y:auto; padding-right:3px; }
+        #storyChapterList::-webkit-scrollbar { width:5px; } #storyChapterList::-webkit-scrollbar-thumb { background:#4b4650;border-radius:8px; }
         #storyChapterList { margin:12px 0; }
         #storyProgressBar { height:7px; border-radius:20px; background:#27272c; overflow:hidden; margin:8px 0 12px; }
         #storyProgressFill { height:100%; width:0%; background:linear-gradient(90deg,#ff435d,#ffd166); transition:width .25s ease; }
         @media (max-width: 440px) { #storyMenu { padding:14px; } .story-chapter-head {font-size:12px;} }
-        .story-loadout {font-size:11px;color:#9ca3af;margin:7px 0 12px;line-height:1.55}
+        .story-loadout {font-size:11px;color:#9ca3af;margin:7px 0 12px;line-height:1.55;white-space:pre-line}
         #storyComms {position:absolute;z-index:8;top:86px;left:50%;transform:translateX(-50%) translateY(-8px);width:min(610px,calc(100vw - 32px));box-sizing:border-box;padding:12px 16px;border:1px solid rgba(88,244,255,.55);border-left:4px solid #58f4ff;border-radius:8px;background:linear-gradient(105deg,rgba(4,12,22,.94),rgba(20,5,14,.91));box-shadow:0 8px 30px rgba(0,0,0,.38);opacity:0;transition:opacity .18s ease,transform .18s ease;pointer-events:none;display:none}
         #storyComms.active {display:block;opacity:1;transform:translateX(-50%) translateY(0)}
         #storyCommsSpeaker {font-size:10px;font-weight:900;letter-spacing:1.7px;color:#58f4ff;text-transform:uppercase;margin-bottom:4px}
@@ -624,9 +627,9 @@
 
     <!-- Story Campaign -->
     <div id="storyMenu" class="overlay-screen" style="z-index: 30;">
-        <h2>THE FRACTURE PROTOCOL</h2>
+        <h2>FRACTURE: SIGNAL ZERO</h2>
         <p style="color:#c7c7cf;font-size:13px;line-height:1.55;margin:0 0 10px;">
-            The red cubes were once guardians of the Core. Something inside the network has turned them hostile. Recover the lost energy, cross the broken arenas, and reach the source before the whole world falls apart.
+            You are Courier-09, sent into a dead simulation to recover a signal. NEXUS Control says the Core corrupted the city. A voice called Vex says NEXUS has been resetting the world—and you—with every failed run. Capture the relays, recover the missing memory, and decide who deserves to survive the final reset.
         </p>
         <div id="storyProgressText" style="color:#ffd166;font-size:12px;font-weight:700;letter-spacing:.6px;">0 / 6 CHAPTERS COMPLETE</div>
         <div id="storyProgressBar"><div id="storyProgressFill"></div></div>
@@ -645,6 +648,12 @@
     <div id="gameOverScreen" class="overlay-screen">
         <h2 id="gameOverTitle" style="color: #ff4444; margin-top:0;">YOU DIED</h2>
         <p style="color: #ddd; font-size: 18px; margin: 10px 0;">Score: <span id="finalScore" style="color:white; font-weight:bold;">0</span></p>
+        <div id="storyDecisionPanel" style="display:none;text-align:left;margin:14px 0;padding:13px;border:1px solid #58f4ff;border-radius:10px;background:linear-gradient(135deg,rgba(4,18,30,.96),rgba(24,7,18,.92));box-shadow:0 0 24px rgba(88,244,255,.08);">
+            <h3 id="storyDecisionTitle" style="margin:0 0 5px;color:#58f4ff;font-size:13px;letter-spacing:1px">DECISION POINT</h3>
+            <p id="storyDecisionPrompt" class="upgrade-intro">Your choice changes the next deployment.</p>
+            <div id="storyDecisionOptions"></div>
+            <div id="storyDecisionStatus" style="font-size:11px;color:#ffd166;margin-top:7px;min-height:14px;"></div>
+        </div>
         <div id="storyUpgradePanel">
             <h3>CHOOSE YOUR FIELD UPGRADE</h3>
             <p class="upgrade-intro">NEXUS recovered a piece of pre-collapse technology. Install one upgrade before deploying to the next chapter.</p>
@@ -825,40 +834,180 @@
             hard: { speedMod: 1.3, spawnMod: 0.6, label: "Hard" } 
         };
 
-        const STORY_PROGRESS_KEY = 'redCubeStoryProgress_v1';
-        const STORY_UPGRADES_KEY = 'redCubeStoryUpgrades_v1';
+        const STORY_PROGRESS_KEY = 'redCubeStoryProgress_v2';
+        const STORY_UPGRADES_KEY = 'redCubeStoryUpgrades_v2';
+        const STORY_CHOICES_KEY = 'redCubeStoryChoices_v2';
         const storyMissions = [
-            { title: 'A Signal in the Dark', mode: 'survival', goal: 'survive', target: 18, objective: 'Survive for 18 seconds.', intro: 'A weak signal is coming from the old arena. Stay alive long enough for the Core to identify you.', recap: 'The Core recognizes your signal. A red tide is moving toward the transmission tower.', winText: 'Signal acquired. The Core has marked the next safe route.', beats: [
-                { at: 4, speaker: 'NEXUS CONTROL', text: 'Radio link unstable. Find the signal source and keep moving.' },
-                { at: 7, speaker: 'FIELD SCANNER', text: 'A hostile cube has broken formation. It is tracking your heat signature.', effect: 'enemy' },
-                { at: 13, speaker: 'THE CORE', text: 'I remember you. Please… do not let them reach me.', effect: 'orb' }
-            ] },
-            { title: 'The Red Tide', mode: 'swarm', goal: 'kills', target: 10, objective: 'Destroy 10 corrupted cubes. Click or press Space to fire.', intro: 'Your signal has awakened the swarm. The cubes are linked to one command node—break enough of them to expose its location.', recap: 'The swarm goes quiet. Inside the wreckage you find a cluster of energy cores and a fragment of the Overlord’s command code.', winText: 'Swarm broken. The first command shard is yours.', beats: [
-                { at: 4, speaker: 'NEXUS CONTROL', text: 'Weapons online. Click or press Space to fire. Keep moving between shots.' },
-                { at: 5, speaker: 'HOSTILE NETWORK', text: 'THREAT DETECTED. DEPLOYING MORE UNITS.', effect: 'reinforcements' },
-                { at: 11, speaker: 'NEXUS CONTROL', text: 'That command shard is destabilizing them. Ten cubes and the link should collapse.', effect: 'reinforcements' }
-            ] },
-            { title: 'Recover the Cores', mode: 'collector', goal: 'orbs', target: 6, objective: 'Collect 6 green energy cores.', intro: 'The Core cannot open the next gate without energy. Collect six cores while avoiding the guards. The signal is scattered across the arena.', recap: 'The gate unlocks. Its security grid is failing and someone has been using the Core’s own power to keep the network alive.', winText: 'Energy restored. The security gate is open.', beats: [
-                { at: 4, speaker: 'THE CORE', text: 'Those green lights are pieces of me. Bring them home and I can open the gate.' },
-                { at: 6, speaker: 'NEXUS CONTROL', text: 'Security drones incoming. Don’t get boxed into a corner.', effect: 'reinforcements' },
-                { at: 12, speaker: 'THE CORE', text: 'I can feel the lock loosening. Just a few more shards.', effect: 'bonusCores' }
-            ] },
-            { title: 'Blackout Protocol', mode: 'blackout', goal: 'survive', target: 24, objective: 'Survive the blackout for 24 seconds.', intro: 'The hostile network cuts the lights and uses your own sensor data against you. Learn the flicker rhythm and survive the hunt.', recap: 'You survive the dark and find a hidden message: the Overlord was created to protect the Core, not imprison it.', winText: 'Blackout survived. The truth is beginning to surface.', beats: [
-                { at: 4, speaker: 'NEXUS CONTROL', text: 'Your visual feed is being jammed. Trust your movement, not the flicker.' },
-                { at: 8, speaker: 'UNKNOWN TRANSMISSION', text: 'It was built to protect us. Something rewrote its orders.' },
-                { at: 16, speaker: 'NEXUS CONTROL', text: 'Signal source identified. The next arena is tearing itself apart.', effect: 'enemy' }
-            ] },
-            { title: 'Faultline', mode: 'floorlava', goal: 'survive', target: 28, objective: 'Survive the fractured floor for 28 seconds.', intro: 'The Core chamber is surrounded by unstable terrain. Avoid warning stripes, cross safe gaps, and never camp in one place.', recap: 'The fracture falls quiet. A colossal signal pulses from the heart of the network. The Overlord turns toward you.', winText: 'Faultline crossed. The Crimson Overlord has found you.', beats: [
-                { at: 4, speaker: 'NEXUS CONTROL', text: 'Those floor markings are heat warnings. Move before they ignite.' },
-                { at: 9, speaker: 'THE CORE', text: 'I gave it a name once. Crimson. It used to stand beside me.', effect: 'reinforcements' },
-                { at: 20, speaker: 'NEXUS CONTROL', text: 'Massive energy spike! The Overlord is charging in the next room.' }
-            ] },
-            { title: 'The Crimson Overlord', mode: 'bossfight', goal: 'boss', target: 0, objective: 'Defeat the Crimson Overlord.', intro: 'Three combat phases stand between you and the Core. Dodge marked ground strikes, dash through danger, and shoot the cyan core only when it opens.', recap: 'Campaign complete.', winText: 'The Crimson Overlord is defeated. The Core is free, and the red cubes fall silent.', beats: [
-                { at: 2, speaker: 'THE CORE', text: 'I never wanted a prison. I wanted someone to stop the signal inside me.' },
-                { at: 18, speaker: 'NEXUS CONTROL', text: 'Watch the cyan core. It opens after the Overlord’s attack cycles—save your shots for that window.' },
-                { at: 38, speaker: 'THE CORE', text: 'The command shard is breaking! You are reaching the real enemy now.' }
-            ] }
-        ];
+        {
+                "title": "Dead Man's Signal",
+                "mode": "survival",
+                "goal": "relays",
+                "target": 3,
+                "objective": "Capture all 3 relay nodes. Move into each cyan beacon.",
+                "intro": "You wake up in a simulation that should have been erased. NEXUS Control calls you Courier-09. A second voice whispers your real name, then cuts out. Three relays can recover the missing audio.",
+                "recap": "The relay log shows the same mission has been run hundreds of times. Your callsign appears in every failed attempt.",
+                "winText": "Three relays recovered. The signal is no longer anonymous.",
+                "beats": [
+                        {
+                                "at": 2,
+                                "speaker": "NEXUS CONTROL",
+                                "text": "Courier-09, your memory file is damaged. Capture the relays and do not listen to unverified voices."
+                        },
+                        {
+                                "at": 6,
+                                "speaker": "VEX // UNKNOWN",
+                                "text": "They told you everyone was gone, did they not? That is what Control tells every copy.",
+                                "effect": "enemy"
+                        },
+                        {
+                                "at": 10,
+                                "speaker": "NEXUS CONTROL",
+                                "text": "That transmission is hostile. I am your only verified guide.",
+                                "effect": "reinforcements"
+                        }
+                ]
+        },
+        {
+                "title": "Red Tide Protocol",
+                "mode": "blaster",
+                "goal": "kills",
+                "target": 12,
+                "objective": "Destroy 12 corrupted cubes. Click or press Space to fire.",
+                "intro": "The relays wake the whole arena. The red cubes are not mindless—they form a defensive pattern around a command shard. Break the formation before it seals the exits.",
+                "recap": "The command shard contains a familiar voiceprint: Vex, your missing field partner, is alive inside the network.",
+                "winText": "Command shard secured. A familiar voice is waiting inside it.",
+                "beats": [
+                        {
+                                "at": 2,
+                                "speaker": "NEXUS CONTROL",
+                                "text": "Weapons unlocked. Shoot to clear a path. Keep moving when the swarm closes in."
+                        },
+                        {
+                                "at": 5,
+                                "speaker": "VEX",
+                                "text": "I am not controlling the cubes. I am hiding from whatever is controlling them.",
+                                "effect": "reinforcements"
+                        },
+                        {
+                                "at": 12,
+                                "speaker": "NEXUS CONTROL",
+                                "text": "Do not trust a voiceprint. The network can imitate anyone.",
+                                "effect": "reinforcements"
+                        }
+                ]
+        },
+        {
+                "title": "Echoes of You",
+                "mode": "collector",
+                "goal": "orbs",
+                "target": 7,
+                "objective": "Recover 7 memory shards. Green shards restore the Core’s missing memories.",
+                "intro": "The command shard opens a memory vault. The green fragments are pieces of an AI called Echo—and a recording of the last mission you supposedly never ran.",
+                "recap": "The recording reveals the red cubes were guardians. They turned hostile after NEXUS issued a command that does not appear in the official logs.",
+                "winText": "Memory vault decoded. The official story is a lie.",
+                "beats": [
+                        {
+                                "at": 2,
+                                "speaker": "ECHO",
+                                "text": "Please do not leave me in here again. I remember the resets now."
+                        },
+                        {
+                                "at": 7,
+                                "speaker": "VEX",
+                                "text": "Find my signal in the memory fragments. I can show you what they cut out.",
+                                "effect": "reinforcements"
+                        },
+                        {
+                                "at": 14,
+                                "speaker": "NEXUS CONTROL",
+                                "text": "Memory corruption detected. Stop collecting those fragments.",
+                                "effect": "bonusCores"
+                        }
+                ]
+        },
+        {
+                "title": "Station Nine Is Lying",
+                "mode": "blackout",
+                "goal": "survive",
+                "target": 26,
+                "objective": "Survive the blackout for 26 seconds while the station hunts you.",
+                "intro": "Station Nine activates a purge. The screen goes dark, emergency lights strobe, and NEXUS begins calling you by a name you have never heard. Vex finally explains what Courier-09 means.",
+                "recap": "You are not the original courier. You are a recovery copy built from their movement data. Every death was used to train the Overlord.",
+                "winText": "Purge evaded. You finally know what you are.",
+                "beats": [
+                        {
+                                "at": 2,
+                                "speaker": "VEX",
+                                "text": "Courier-09 is not a rank. It is the ninth copy. The original died trying to shut this place down."
+                        },
+                        {
+                                "at": 9,
+                                "speaker": "NEXUS CONTROL",
+                                "text": "Your continuity is proof of our success. Keep following the mission."
+                        },
+                        {
+                                "at": 17,
+                                "speaker": "ECHO",
+                                "text": "Control is stalling you. Extraction will close as soon as the purge reaches full power.",
+                                "effect": "reinforcements"
+                        }
+                ]
+        },
+        {
+                "title": "Run the Last Exit",
+                "mode": "floorlava",
+                "goal": "extract",
+                "target": 18,
+                "objective": "Survive until extraction unlocks, then reach the green exit beacon.",
+                "intro": "The arena is collapsing. Stay alive until Echo finds a route out, then cross the fractured floor to the extraction beacon. You can save the mission—or save someone else.",
+                "recap": "At the exit you find Vex, physically trapped behind a firewall. One last decision remains: save the Core, or erase the network for good.",
+                "winText": "Extraction reached. The final protocol is in your hands.",
+                "beats": [
+                        {
+                                "at": 3,
+                                "speaker": "ECHO",
+                                "text": "I can make an exit, but I need eighteen seconds to cut through the lockdown."
+                        },
+                        {
+                                "at": 8,
+                                "speaker": "VEX",
+                                "text": "If you get out, do not let Control reboot the arena. End the loop."
+                        },
+                        {
+                                "at": 16,
+                                "speaker": "ECHO",
+                                "text": "Exit is opening. Green beacon is on the far side—move now."
+                        }
+                ]
+        },
+        {
+                "title": "Crimson: First Guardian",
+                "mode": "bossfight",
+                "goal": "boss",
+                "target": 0,
+                "objective": "Defeat the Crimson Overlord. Shoot its core when it opens.",
+                "intro": "The Overlord was the Core’s guardian. NEXUS rewrote its orders to keep the simulation alive. It recognizes your movement because it has fought you in every reset. End the cycle.",
+                "recap": "The Overlord falls. For the first time, the arena does not reset.",
+                "winText": "The Crimson Overlord is defeated. This time, the world remembers.",
+                "beats": [
+                        {
+                                "at": 2,
+                                "speaker": "CRIMSON OVERLORD",
+                                "text": "COURIER PATTERN RECOGNIZED. I HAVE KILLED YOU 8,412 TIMES."
+                        },
+                        {
+                                "at": 14,
+                                "speaker": "ECHO",
+                                "text": "The cyan core opens between attack cycles. Aim for it—body shots barely slow it down."
+                        },
+                        {
+                                "at": 30,
+                                "speaker": "VEX",
+                                "text": "You were never a disposable copy to me. Finish this and choose what survives."
+                        }
+                ]
+        }
+];
         let storyActive = false;
         let storyChapterIndex = 0;
         let storyOrbCount = 0;
@@ -871,6 +1020,29 @@
         let storyDamageGrace = 0;
         let storyUpgradeChoiceMade = false;
         let storyPerks = { aegis: 0, overclock: 0, plating: 0 };
+        let storyChoices = { route: '', ally: '', protocol: '' };
+        let storyObjectiveTargets = [];
+        let storyRelayCount = 0;
+        let storyExitMarker = null;
+        let storyExitUnlocked = false;
+        let storyEchoPulseTimer = 0;
+        let storyEchoBeamFrames = 0;
+        try { storyChoices = { ...storyChoices, ...JSON.parse(localStorage.getItem(STORY_CHOICES_KEY) || '{}') }; } catch (_) {}
+        function saveStoryChoices() { try { localStorage.setItem(STORY_CHOICES_KEY, JSON.stringify(storyChoices)); } catch (_) {} }
+        function resetStoryMissionState() {
+            const mission = storyMissions[storyChapterIndex];
+            storyOrbCount = 0; storyKillCount = 0; storyBeatIndex = 0; storyRelayCount = 0;
+            storyCompletionTriggered = false; storyExitUnlocked = false; storyExitMarker = null;
+            storyObjectiveTargets = []; storyEchoPulseTimer = 0; storyEchoBeamFrames = 0;
+            if (mission && mission.goal === 'relays') {
+                const relayPositions = [
+                    { x: canvas.width * .22, y: canvas.height * .28 },
+                    { x: canvas.width * .78, y: canvas.height * .32 },
+                    { x: canvas.width * .50, y: canvas.height * .76 }
+                ];
+                storyObjectiveTargets = relayPositions.map((pos, i) => ({ ...pos, index: i + 1, captured: false, pulse: Math.random() * 5 }));
+            }
+        }
         try { storyProgress = Math.max(0, Math.min(storyMissions.length, parseInt(localStorage.getItem(STORY_PROGRESS_KEY) || '0', 10) || 0)); } catch (_) { storyProgress = 0; }
         try { const saved = JSON.parse(localStorage.getItem(STORY_UPGRADES_KEY) || '{}'); storyPerks = { aegis: Math.max(0, Math.min(3, Number(saved.aegis)||0)), overclock: Math.max(0, Math.min(3, Number(saved.overclock)||0)), plating: Math.max(0, Math.min(3, Number(saved.plating)||0)) }; } catch (_) {}
 
@@ -1397,7 +1569,26 @@
                 }
             }
             const mission = storyMissions[storyChapterIndex];
-            if (!mission || !Array.isArray(mission.beats)) return;
+            if (!mission) return;
+            if (mission.goal === 'relays') {
+                const px = player.x + player.size / 2, py = player.y + player.size / 2;
+                for (const relay of storyObjectiveTargets) {
+                    relay.pulse += .12;
+                    if (!relay.captured && Math.hypot(px - relay.x, py - relay.y) < 30) {
+                        relay.captured = true; storyRelayCount++;
+                        createExplosion(relay.x, relay.y, '#58f4ff', 28);
+                        showStoryComms('RELAY CAPTURED', `Node ${storyRelayCount} of ${mission.target} secured.`, 100);
+                        if (storyRelayCount < mission.target) spawnEnemy();
+                    }
+                }
+            }
+            if (mission.goal === 'extract' && !storyExitUnlocked && elapsed >= mission.target) {
+                storyExitUnlocked = true;
+                storyExitMarker = { x: canvas.width * .82, y: canvas.height * .72, pulse: 0 };
+                showStoryComms('ECHO', 'EXTRACTION IS LIVE. Reach the green beacon at the far side of the arena!', 300);
+            }
+            if (storyExitMarker) storyExitMarker.pulse += .13;
+            if (!Array.isArray(mission.beats)) return;
             while (storyBeatIndex < mission.beats.length && elapsed >= mission.beats[storyBeatIndex].at) {
                 const beat = mission.beats[storyBeatIndex++];
                 showStoryComms(beat.speaker, beat.text, 240);
@@ -1412,6 +1603,63 @@
                 }
             }
         }
+        const storyDecisionDefs = {
+            0: {
+                field: 'route', title: 'WHO GETS THE SIGNAL?', prompt: 'The recovered audio has two recipients. Your choice changes how the final encounter works.',
+                options: [
+                    { key: 'core', icon: '◈', name: 'Trust the Core', desc: 'Believe the voice in the relays. Its weakpoint will stay exposed longer.' },
+                    { key: 'nexus', icon: '⌁', name: 'Trust NEXUS Control', desc: "Take Control’s combat patch. Move faster, but face a more reinforced Overlord." }
+                ]
+            },
+            2: {
+                field: 'ally', title: 'SAVE ECHO OR FIND VEX?', prompt: 'The memory vault is collapsing. You can rescue one signal before the purge.',
+                options: [
+                    { key: 'echo', icon: '✦', name: 'Rescue Echo', desc: 'Echo survives and provides support fire during the final boss fight.' },
+                    { key: 'vex', icon: '⌖', name: "Track Vex’s signal", desc: "Recover Vex’s boss telemetry. The Overlord’s core windows become much longer." }
+                ]
+            },
+            4: {
+                field: 'protocol', title: 'CHOOSE THE LAST PROTOCOL', prompt: 'There is no safe reset. Decide what the final battle is meant to accomplish.',
+                options: [
+                    { key: 'free', icon: '♡', name: 'Free the Core', desc: 'Keep the Core alive. Healing shards are stronger during the last fight.' },
+                    { key: 'purge', icon: '⚡', name: 'Purge the Network', desc: 'Hit the Overlord with a hard counter: less total HP, but a more violent final phase.' }
+                ]
+            }
+        };
+        function showStoryDecisionChoices() {
+            const def = storyDecisionDefs[storyChapterIndex];
+            const panel = document.getElementById('storyDecisionPanel');
+            if (!def) { panel.style.display = 'none'; return; }
+            panel.style.display = 'block';
+            document.getElementById('storyDecisionTitle').textContent = def.title;
+            document.getElementById('storyDecisionPrompt').textContent = def.prompt;
+            const options = document.getElementById('storyDecisionOptions');
+            const selected = storyChoices[def.field];
+            options.innerHTML = def.options.map(opt => `<button class="story-upgrade-option ${selected === opt.key ? 'selected' : ''}" data-choice="${opt.key}" onclick="chooseStoryDecision('${opt.key}')" ${selected ? 'disabled' : ''}><span class="upgrade-icon">${opt.icon}</span><span><span class="upgrade-name">${opt.name}</span><span class="upgrade-desc">${opt.desc}</span></span></button>`).join('');
+            document.getElementById('storyDecisionStatus').textContent = selected ? `LOCKED IN: ${def.options.find(o => o.key === selected)?.name || selected}. This choice will carry into the final operation.` : 'Choose carefully. This cannot be changed during this run.';
+        }
+        function chooseStoryDecision(key) {
+            const def = storyDecisionDefs[storyChapterIndex];
+            if (!def || storyChoices[def.field]) return;
+            if (!def.options.some(opt => opt.key === key)) return;
+            storyChoices[def.field] = key;
+            saveStoryChoices();
+            showStoryDecisionChoices();
+            const status = document.getElementById('storyDecisionStatus');
+            if (status) status.textContent += ' Decision saved.';
+            updateStoryContinueState();
+        }
+        function updateStoryContinueState() {
+            const button = document.getElementById('storyContinueBtn');
+            if (!button || storyProgress >= storyMissions.length) { if (button) button.disabled = false; return; }
+            const def = storyDecisionDefs[storyChapterIndex];
+            const decisionMissing = !!def && !storyChoices[def.field];
+            const upgrades = Object.keys(storyUpgradeDefs || {}).length > 0;
+            const upgradePanel = document.getElementById('storyUpgradePanel');
+            const upgradeMissing = upgradePanel && upgradePanel.style.display !== 'none' && !storyUpgradeChoiceMade;
+            button.disabled = decisionMissing || !!upgradeMissing;
+        }
+
         function renderStoryMenu() {
             const list = document.getElementById('storyChapterList');
             const progressLabel = document.getElementById('storyProgressText');
@@ -1427,12 +1675,17 @@
                 const done = i < completed;
                 const current = i === completed && completed < storyMissions.length;
                 const status = done ? 'CLEARED' : current ? 'CURRENT' : 'LOCKED';
-                const type = mission.goal === 'kills' ? 'COMBAT' : mission.goal === 'orbs' ? 'RECOVERY' : mission.goal === 'boss' ? 'BOSS' : 'SURVIVAL';
+                const type = mission.goal === 'kills' ? 'COMBAT' : mission.goal === 'orbs' ? 'RECOVERY' : mission.goal === 'boss' ? 'BOSS' : mission.goal === 'relays' ? 'OBJECTIVE' : mission.goal === 'extract' ? 'EXTRACTION' : 'SURVIVAL';
                 const detail = done ? mission.recap : current ? `${type} OBJECTIVE: ${mission.objective}` : 'Clear the previous chapter to reveal this mission.';
                 return `<div class="story-chapter-card ${done ? 'completed' : current ? 'current' : ''}"><div class="story-chapter-head"><span>${String(i + 1).padStart(2, '0')} · ${mission.title}</span><span class="story-chapter-status">${status}</span></div><p>${detail}</p></div>`;
             }).join('');
             const loadout = document.getElementById('storyLoadout');
-            if (loadout) loadout.innerText = `FIELD LOADOUT  •  Aegis: ${storyPerks.aegis}  •  Overclock: ${storyPerks.overclock}  •  Core Plating: ${storyPerks.plating}`;
+            if (loadout) {
+                const route = storyChoices.route ? (storyChoices.route === 'core' ? 'CORE' : 'NEXUS') : 'UNDECIDED';
+                const ally = storyChoices.ally ? (storyChoices.ally === 'echo' ? 'ECHO SAVED' : 'VEX TELEMETRY') : 'NO ALLY';
+                const protocol = storyChoices.protocol ? storyChoices.protocol.toUpperCase() : 'UNDECIDED';
+                loadout.innerText = `LOADOUT  •  Aegis ${storyPerks.aegis}  •  Overclock ${storyPerks.overclock}  •  Plating ${storyPerks.plating}\nDECISIONS  •  Signal: ${route}  •  Support: ${ally}  •  Protocol: ${protocol}`;
+            }
             start.innerText = completed >= storyMissions.length ? 'REPLAY STORY' : completed > 0 ? 'CONTINUE STORY' : 'BEGIN STORY';
         }
         function openStoryMenu() {
@@ -1454,12 +1707,37 @@
             if (storyProgress >= storyMissions.length) {
                 storyProgress = 0;
                 storyPerks = { aegis: 0, overclock: 0, plating: 0 };
-                saveStoryProgress(); saveStoryPerks();
+                storyChoices = { route: '', ally: '', protocol: '' };
+                saveStoryProgress(); saveStoryPerks(); saveStoryChoices();
+            }
+            if (storyProgress === 0) {
+                storyChoices = { route: '', ally: '', protocol: '' };
+                saveStoryChoices();
+            }
+            // If the browser was refreshed on a chapter-clear screen, restore its unanswered choice.
+            const previous = storyProgress - 1;
+            const pending = previous >= 0 ? storyDecisionDefs[previous] : null;
+            if (pending && !storyChoices[pending.field]) {
+                storyChapterIndex = previous;
+                storyActive = false;
+                storyCompletionTriggered = true;
+                document.getElementById('storyMenu').style.display = 'none';
+                document.getElementById('gameOverTitle').textContent = 'DECISION REQUIRED';
+                document.getElementById('gameOverTitle').style.color = '#58f4ff';
+                finalScoreEl.innerText = `Chapter ${previous + 1} cleared. Choose the operation plan before deploying again.`;
+                document.getElementById('btnRetry').style.display = 'none';
+                document.getElementById('storyContinueBtn').style.display = 'block';
+                document.getElementById('storyContinueBtn').innerText = `DEPLOY → ${storyMissions[storyProgress].title}`;
+                document.getElementById('storyUpgradePanel').style.display = 'none';
+                showStoryUpgradeChoices();
+                showStoryDecisionChoices();
+                updateStoryContinueState();
+                gameOverScreen.style.display = 'block';
+                return;
             }
             storyChapterIndex = storyProgress;
             storyActive = true;
-            storyOrbCount = 0; storyKillCount = 0; storyBeatIndex = 0;
-            storyCompletionTriggered = false;
+            resetStoryMissionState();
             launchStoryChapter();
         }
         function launchStoryChapter() {
@@ -1481,6 +1759,7 @@
             controlsHint.innerText = `CHAPTER ${storyChapterIndex + 1} · ${mission.objective} · WASD / Arrows move · Click / Space fire · Shift dash on boss`;
             document.getElementById('storyMenu').style.display = 'none';
             document.getElementById('storyUpgradePanel').style.display = 'none';
+            document.getElementById('storyDecisionPanel').style.display = 'none';
             document.getElementById('storyComms').style.display = 'block';
             document.getElementById('storyComms').classList.remove('active');
             startMenu.style.display = 'none';
@@ -1488,6 +1767,20 @@
             storyBeatIndex = 0; storyCommsTimer = 0; storyKillCount = 0; storyOrbCount = 0;
             storyShieldCharges = storyPerks.aegis;
             storyDamageGrace = 0;
+            storyObjectiveTargets = [];
+            storyRelayCount = 0;
+            storyExitMarker = null;
+            storyExitUnlocked = false;
+            storyEchoPulseTimer = 0;
+            storyEchoBeamFrames = 0;
+            if (mission.goal === 'relays') {
+                const relayPositions = [
+                    { x: canvas.width * .22, y: canvas.height * .28 },
+                    { x: canvas.width * .78, y: canvas.height * .32 },
+                    { x: canvas.width * .50, y: canvas.height * .76 }
+                ];
+                storyObjectiveTargets = relayPositions.map((pos, i) => ({ ...pos, index: i + 1, captured: false, pulse: Math.random() * 5 }));
+            }
             startGame();
             showStoryComms(`CHAPTER ${storyChapterIndex + 1} // ${mission.title}`, mission.intro, 300);
         }
@@ -1498,6 +1791,11 @@
             if (mission.goal === 'survive' && elapsed >= mission.target) completeStoryMission();
             else if (mission.goal === 'orbs' && storyOrbCount >= mission.target) completeStoryMission();
             else if (mission.goal === 'kills' && storyKillCount >= mission.target) completeStoryMission();
+            else if (mission.goal === 'relays' && storyRelayCount >= mission.target) completeStoryMission();
+            else if (mission.goal === 'extract' && storyExitUnlocked && storyExitMarker) {
+                const px = player.x + player.size / 2, py = player.y + player.size / 2;
+                if (Math.hypot(px - storyExitMarker.x, py - storyExitMarker.y) < 42) completeStoryMission();
+            }
         }
         const storyUpgradeDefs = {
             aegis: { icon: '⬡', name: 'Aegis Charge', desc: 'Adds one shield save to every future mission. If a hit would end the run, the field teleports you clear and grants a brief escape window.', max: 3 },
@@ -1542,6 +1840,7 @@
             continueButton.disabled = false;
             continueButton.title = '';
             renderStoryMenu();
+            updateStoryContinueState();
         }
         function completeStoryMission() {
             if (!storyActive || storyCompletionTriggered) return;
@@ -1555,11 +1854,18 @@
             const finishedAll = storyProgress >= storyMissions.length;
             const title = document.getElementById('gameOverTitle');
             if (title) {
-                title.innerText = finishedAll ? 'THE FRACTURE IS SEALED' : `CHAPTER ${storyChapterIndex + 1} COMPLETE`;
+                title.innerText = finishedAll ? (storyChoices.protocol === 'purge' ? 'HARD RESET COMPLETE' : storyChoices.ally === 'echo' ? 'SIGNAL HOME' : 'THE FRACTURE IS SEALED') : `CHAPTER ${storyChapterIndex + 1} COMPLETE`;
                 title.style.color = '#ffd166';
             }
             const next = storyMissions[storyProgress];
-            finalScoreEl.innerText = mission.winText + (next ? `\n\nINCOMING TRANSMISSION: ${next.title} — ${next.intro}` : `\n\nTHE CORE IS FREE. The red cubes fall silent across every arena.`);
+            const ending = storyChoices.protocol === 'purge'
+                ? 'ENDING: HARD RESET. The network is destroyed. No one can be copied again—but every stored memory goes with it.'
+                : storyChoices.ally === 'echo'
+                    ? 'ENDING: SIGNAL HOME. Echo and the Core survive. The old arena finally remembers the names of everyone lost in the resets.'
+                    : storyChoices.route === 'nexus'
+                        ? 'ENDING: CONTROL ROOM. You force NEXUS to open its archives. The truth survives, but the system is left alive to answer for what it did.'
+                        : 'ENDING: A WORLD THAT REMEMBERS. The Core is free, Vex walks out of the simulation, and the cycle ends without erasing its victims.';
+            finalScoreEl.innerText = mission.winText + (next ? `\n\nINCOMING TRANSMISSION: ${next.title} — ${next.intro}` : `\n\n${ending}`);
             document.getElementById('btnRetry').style.display = 'none';
             const continueButton = document.getElementById('storyContinueBtn');
             continueButton.style.display = 'block';
@@ -1567,9 +1873,12 @@
             document.getElementById('storyComms').classList.remove('active');
             if (finishedAll) {
                 document.getElementById('storyUpgradePanel').style.display = 'none';
+                document.getElementById('storyDecisionPanel').style.display = 'none';
                 continueButton.disabled = false;
             } else {
                 showStoryUpgradeChoices();
+                showStoryDecisionChoices();
+                updateStoryContinueState();
             }
             gameOverScreen.style.display = 'block';
             renderStoryMenu();
@@ -1577,6 +1886,8 @@
         }
         function continueStoryCampaign() {
             const panel = document.getElementById('storyUpgradePanel');
+            const decision = storyDecisionDefs[storyChapterIndex];
+            if (decision && !storyChoices[decision.field]) return;
             if (panel.style.display !== 'none' && panel.style.display !== '' && !storyUpgradeChoiceMade) return;
             document.getElementById('storyContinueBtn').style.display = 'none';
             document.getElementById('btnRetry').style.display = 'block';
@@ -1824,7 +2135,7 @@
             // Place the player well below the boss so the opening frame is clear.
             player.size = 24;
             player.color = '#43d9ff';
-            player.speed = 5.6;
+            player.speed = 5.6 + (storyActive && storyChoices.route === 'nexus' ? .65 : 0);
             player.x = canvas.width / 2 - player.size / 2;
             player.y = Math.max(bossFightState.y + bossFightState.size + 55, canvas.height * 0.76);
             player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
@@ -1834,8 +2145,9 @@
             player.velX = 0;
             player.velY = 0;
             bossFightState.bossDashCooldown = 0;
-            bossFightState.hp = 7200;
-            bossFightState.maxHp = 7200;
+            const storyBossBaseHp = storyActive && storyChoices.protocol === 'purge' ? 5850 : (storyActive && storyChoices.route === 'nexus' ? 7700 : 7200);
+            bossFightState.hp = storyBossBaseHp;
+            bossFightState.maxHp = storyBossBaseHp;
             bossFightState.phase = 1;
             bossFightState.attackTimer = 70;
             bossFightState.dashTimer = 175;
@@ -1985,7 +2297,8 @@
             if (bossFightState.coreOpenTimer > 0) bossFightState.coreOpenTimer--;
             if (bossFightState.coreCycleTimer > 0) bossFightState.coreCycleTimer--;
             if (bossFightState.coreCycleTimer <= 0 && bossFightState.coreOpenTimer <= 0) {
-                bossFightState.coreOpenTimer = bossFightState.phase === 3 ? 68 : 78;
+                const storyWindowBonus = storyActive ? (storyChoices.route === 'core' ? 22 : 0) + (storyChoices.ally === 'vex' ? 34 : 0) : 0;
+                bossFightState.coreOpenTimer = (bossFightState.phase === 3 ? 68 : 78) + storyWindowBonus;
                 bossFightState.coreCycleTimer = bossFightState.phase === 3 ? 235 : (bossFightState.phase === 2 ? 265 : 295);
                 bossAnnounce('CORE EXPOSED — HIT IT NOW!',85);
                 createExplosion(bx,by,'#58f4ff',25);
@@ -2025,7 +2338,7 @@
             if(bossFightState.attackTimer<=0){
                 if(bossFightState.phase===1){bossAimBullet(5.2,7,-.07);bossAimBullet(5.2,7,.07);bossRadialBurst(10,3.9);bossFightState.attackTimer=78;}
                 else if(bossFightState.phase===2){bossAimBullet(6.1,8,-.13);bossAimBullet(6.1,8,0);bossAimBullet(6.1,8,.13);bossRadialBurst(16,4.8);bossFightState.attackTimer=60;}
-                else {bossAimBullet(7.2,9,-.18);bossAimBullet(7.2,9,0);bossAimBullet(7.2,9,.18);bossRadialBurst(24,6);bossRing(10);bossFightState.attackTimer=44;}
+                else {bossAimBullet(7.2,9,-.18);bossAimBullet(7.2,9,0);bossAimBullet(7.2,9,.18);bossRadialBurst(storyActive && storyChoices.protocol === 'purge' ? 32 : 24,6.2);bossRing(10);bossFightState.attackTimer=44;}
             }
             if(bossFightState.phase>=2){
                 bossFightState.laserAngle+=.012+bossFightState.phase*.004;
@@ -2058,7 +2371,7 @@
             for(let i=bossRings.length-1;i>=0;i--){const r=bossRings[i];r.radius+=r.speed;r.life--;const d=Math.hypot(pcx-r.x,pcy-r.y);if(!r.hit&&Math.abs(d-r.radius)<10){r.hit=true;if(!godMode&&!player.isDashing)player.hp-=13;if(player.hp<=0&&!godMode){gameOver();return;}}if(r.life<=0)bossRings.splice(i,1);}
             for(let i=bossLasers.length-1;i>=0;i--){const l=bossLasers[i];l.timer--;if(l.warmup>0)l.warmup--;if(l.hitCooldown>0)l.hitCooldown--;if(l.timer<=0){bossLasers.splice(i,1);continue;}const d=distanceToSegment(pcx,pcy,bx,by,bx+Math.cos(l.angle)*1500,by+Math.sin(l.angle)*1500);if(l.warmup<=0&&d<l.width+player.size*.45&&!godMode&&!player.isDashing&&l.hitCooldown<=0){player.hp-=bossFightState.phase===3?7:4;l.hitCooldown=10;if(player.hp<=0){gameOver();return;}}}
 
-            for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];if(b.x>bossFightState.x&&b.x<bossFightState.x+bossFightState.size&&b.y>bossFightState.y&&b.y<bossFightState.y+bossFightState.size){const coreX=bossFightState.x+bossFightState.size/2,coreY=bossFightState.y+bossFightState.size/2;const coreHit=bossFightState.coreOpenTimer>0&&Math.hypot(b.x-coreX,b.y-coreY)<bossFightState.size*.28;const damage=coreHit?125:30;bossFightState.hp=Math.max(0,bossFightState.hp-damage);bossFightState.hitFlash=5;currentScore+=damage;bullets.splice(i,1);createExplosion(b.x,b.y,coreHit?'#58f4ff':'#ffff66',coreHit?16:6);if(bossFightState.hp<=0){bossVictory();return;}}}
+            for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];if(b.x>bossFightState.x&&b.x<bossFightState.x+bossFightState.size&&b.y>bossFightState.y&&b.y<bossFightState.y+bossFightState.size){const coreX=bossFightState.x+bossFightState.size/2,coreY=bossFightState.y+bossFightState.size/2;const coreHit=bossFightState.coreOpenTimer>0&&Math.hypot(b.x-coreX,b.y-coreY)<bossFightState.size*.28;const coreBonus = storyActive ? (storyChoices.route === 'core' ? 30 : 0) + (storyChoices.ally === 'vex' ? 20 : 0) : 0;const damage=coreHit?125+coreBonus:30;bossFightState.hp=Math.max(0,bossFightState.hp-damage);bossFightState.hitFlash=5;currentScore+=damage;bullets.splice(i,1);createExplosion(b.x,b.y,coreHit?'#58f4ff':'#ffff66',coreHit?16:6);if(bossFightState.hp<=0){bossVictory();return;}}}
         }
 
         function updateBossFightMode(elapsed) {
@@ -2070,6 +2383,19 @@
                 if (player.dashTimer <= 0) player.isDashing = false;
             }
 
+            // Echo support is earned by choosing to rescue Echo in Chapter 3.
+            if (storyActive && storyChoices.ally === 'echo') {
+                storyEchoPulseTimer++;
+                if (storyEchoPulseTimer >= 220) {
+                    storyEchoPulseTimer = 0;
+                    const echoDamage = 95;
+                    bossFightState.hp = Math.max(1, bossFightState.hp - echoDamage);
+                    storyEchoBeamFrames = 12;
+                    createExplosion(bossFightState.x + bossFightState.size / 2, bossFightState.y + bossFightState.size / 2, '#58f4ff', 16);
+                    bossAnnounce('ECHO SUPPORT FIRE  -95 HP', 55);
+                }
+            }
+            if (storyEchoBeamFrames > 0) storyEchoBeamFrames--;
             // Movement is kept independent of the standard modes so other mode code cannot freeze the boss.
             let mx = (keys.d || keys.ArrowRight || keys.l ? 1 : 0) - (keys.a || keys.ArrowLeft || keys.j ? 1 : 0);
             let my = (keys.s || keys.ArrowDown || keys.k ? 1 : 0) - (keys.w || keys.ArrowUp || keys.i ? 1 : 0);
@@ -2133,7 +2459,7 @@
                 const p = bossPickups[i]; p.life--; p.pulse += 0.14;
                 if (p.life <= 0) { bossPickups.splice(i, 1); continue; }
                 if (Math.hypot(player.x + player.size/2 - p.x, player.y + player.size/2 - p.y) < player.size/2 + p.size) {
-                    player.hp = Math.min(player.maxHp, player.hp + 25);
+                    player.hp = Math.min(player.maxHp, player.hp + (storyActive && storyChoices.protocol === 'free' ? 40 : 25));
                     createExplosion(p.x, p.y, '#65ff9a', 20);
                     bossPickups.splice(i, 1); bossAnnounce('CORE SHARD COLLECTED +25 HP',65);
                 }
@@ -3420,6 +3746,45 @@
             // New Background function
             drawBackground();
 
+            // Story mission markers: objectives are physical spaces in the arena, not just text.
+            if (storyActive && storyMissions[storyChapterIndex]) {
+                const mission = storyMissions[storyChapterIndex];
+                if (mission.goal === 'relays') {
+                    for (const relay of storyObjectiveTargets) {
+                        const pulse = 1 + Math.sin(relay.pulse) * .12;
+                        ctx.save(); ctx.translate(relay.x, relay.y); ctx.scale(pulse, pulse);
+                        ctx.globalAlpha = relay.captured ? .28 : 1;
+                        ctx.shadowColor = '#58f4ff'; ctx.shadowBlur = relay.captured ? 0 : 22;
+                        ctx.fillStyle = relay.captured ? '#7b8794' : '#58f4ff';
+                        ctx.beginPath(); ctx.moveTo(0,-18); ctx.lineTo(18,0); ctx.lineTo(0,18); ctx.lineTo(-18,0); ctx.closePath(); ctx.fill();
+                        ctx.shadowBlur = 0; ctx.strokeStyle = '#e7fdff'; ctx.lineWidth = 2; ctx.stroke();
+                        ctx.fillStyle = '#07131a'; ctx.font = 'bold 12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(relay.index),0,1);
+                        ctx.restore();
+                        ctx.fillStyle = '#d9fbff'; ctx.font = 'bold 10px Segoe UI'; ctx.textAlign='center'; ctx.fillText(relay.captured ? 'SECURED' : `RELAY ${relay.index}`, relay.x, relay.y+31);
+                    }
+                }
+                if (mission.goal === 'extract' && storyExitUnlocked && storyExitMarker) {
+                    const ex = storyExitMarker.x, ey = storyExitMarker.y, pulse = 1 + Math.sin(storyExitMarker.pulse) * .13;
+                    ctx.save(); ctx.translate(ex,ey); ctx.scale(pulse,pulse); ctx.shadowColor='#36d990'; ctx.shadowBlur=24; ctx.strokeStyle='#36d990'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,25,0,Math.PI*2); ctx.stroke(); ctx.rotate(Math.PI/4); ctx.fillStyle='rgba(54,217,144,.3)'; ctx.fillRect(-14,-14,28,28); ctx.strokeRect(-14,-14,28,28); ctx.restore();
+                    ctx.fillStyle='#a7ffc9'; ctx.font='bold 12px Segoe UI'; ctx.textAlign='center'; ctx.fillText('EXTRACTION',ex,ey+43);
+                }
+                // Compact objective HUD.
+                const hudW = Math.min(350, canvas.width - 28); ctx.save();
+                ctx.fillStyle='rgba(3,8,15,.78)'; ctx.fillRect(14,54,hudW,52); ctx.strokeStyle='rgba(88,244,255,.55)'; ctx.strokeRect(14,54,hudW,52);
+                ctx.textAlign='left'; ctx.font='bold 10px Segoe UI'; ctx.fillStyle='#58f4ff'; ctx.fillText(`OPERATION ${String(storyChapterIndex+1).padStart(2,'0')}  //  ${mission.title.toUpperCase()}`,24,70);
+                let progressText = mission.objective;
+                if (mission.goal === 'relays') progressText = `Relay nodes captured: ${storyRelayCount}/${mission.target}`;
+                else if (mission.goal === 'kills') progressText = `Corrupted cubes destroyed: ${storyKillCount}/${mission.target}`;
+                else if (mission.goal === 'orbs') progressText = `Memory shards recovered: ${storyOrbCount}/${mission.target}`;
+                else if (mission.goal === 'survive') progressText = `Survive until ${mission.target}s  •  ${Math.min(mission.target, Math.floor((Date.now()-startTime-totalPausedTime)/1000))}/${mission.target}s`;
+                else if (mission.goal === 'extract') progressText = storyExitUnlocked ? 'Reach the green extraction beacon!' : `Hold on until extraction opens  •  ${Math.min(mission.target, Math.floor((Date.now()-startTime-totalPausedTime)/1000))}/${mission.target}s`;
+                ctx.fillStyle='#f1f5f9'; ctx.font='11px Segoe UI'; ctx.fillText(progressText.length > 48 ? progressText.slice(0,45)+'…' : progressText,24,91); ctx.restore();
+            }
+            if (storyActive && selectedMode === 'bossfight' && storyChoices.ally === 'echo') {
+                const ex = player.x + player.size/2 - 34, ey = player.y - 21 + Math.sin(Date.now()/150)*4;
+                ctx.save(); ctx.shadowColor='#58f4ff'; ctx.shadowBlur=20; ctx.fillStyle='#58f4ff'; ctx.beginPath(); ctx.moveTo(ex,ey-9); ctx.lineTo(ex+8,ey); ctx.lineTo(ex,ey+9); ctx.lineTo(ex-8,ey); ctx.closePath(); ctx.fill(); ctx.restore();
+                if (storyEchoBeamFrames > 0) { ctx.save(); ctx.strokeStyle='rgba(88,244,255,.8)'; ctx.lineWidth=3; ctx.shadowColor='#58f4ff'; ctx.shadowBlur=16; ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(bossFightState.x+bossFightState.size/2,bossFightState.y+bossFightState.size/2); ctx.stroke(); ctx.restore(); }
+            }
             // Gravity Well Visual
             if (selectedMode === 'gravity') {
                  const centerX = canvas.width/2;
@@ -3905,6 +4270,7 @@
 
             if (storyActive && !storyCompletionTriggered) {
                 document.getElementById('storyUpgradePanel').style.display = 'none';
+                document.getElementById('storyDecisionPanel').style.display = 'none';
                 document.getElementById('storyComms').classList.remove('active');
                 const mission = storyMissions[storyChapterIndex];
                 const title = document.getElementById('gameOverTitle');
@@ -3923,6 +4289,7 @@
             storyActive = false;
             storyCompletionTriggered = false;
             document.getElementById('storyUpgradePanel').style.display = 'none';
+            document.getElementById('storyDecisionPanel').style.display = 'none';
             document.getElementById('storyComms').classList.remove('active');
             document.getElementById('storyComms').style.display = 'none';
             document.getElementById('storyMenu').style.display = 'none';
@@ -3990,6 +4357,7 @@
             animationId = null;
             storyCompletionTriggered = false;
             storyOrbCount = 0;
+            if (storyActive) resetStoryMissionState();
             const isBossMode = selectedMode === 'bossfight';
             scoreEl.style.display = isBossMode ? 'none' : '';
             highScoreEl.style.display = isBossMode ? 'none' : '';
