@@ -209,6 +209,37 @@
         
         .btn-mode.selected { background: rgba(68, 136, 255, 0.2); border-color: #4488ff; color: #4488ff; }
 
+        .btn-platformer {
+            grid-column: 1 / -1;
+            border-color: #58f4ff;
+            color: #8ef8ff;
+            background: linear-gradient(100deg, rgba(0,190,220,.15), rgba(94,72,255,.16));
+            font-weight: 800;
+            letter-spacing: .8px;
+            padding: 13px 8px;
+        }
+        .btn-platformer.selected { color: #fff; border-color: #b5fbff; background: linear-gradient(100deg, rgba(0,190,220,.27), rgba(94,72,255,.28)); box-shadow: 0 0 18px rgba(88,244,255,.16); }
+        #platformerTouchControls {
+            display: none;
+            position: absolute;
+            left: 0; right: 0; bottom: 16px;
+            padding: 0 18px;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 12px;
+            z-index: 6;
+            pointer-events: none;
+        }
+        #platformerTouchControls .pt-group { display:flex; gap:10px; pointer-events:auto; }
+        #platformerTouchControls button {
+            width: clamp(52px, 12vw, 74px); height: clamp(52px, 12vw, 74px);
+            padding: 0; margin:0; border-radius: 18px;
+            font-size: 22px; font-weight:900; color:#eaffff;
+            background:rgba(5,18,30,.78); border:1px solid rgba(88,244,255,.65);
+            touch-action:none; user-select:none; -webkit-user-select:none;
+        }
+        #platformerTouchControls button.jump { width: clamp(70px, 17vw, 100px); color:#fff; background:rgba(53,120,255,.82); border-color:#9fc8ff; }
+
         .btn-boss {
             grid-column: 1 / -1;
             border-color: #ff3344;
@@ -400,6 +431,16 @@
 
     <canvas id="gameCanvas" tabindex="1"></canvas>
 
+    <div id="platformerTouchControls" aria-label="Platformer touch controls">
+        <div class="pt-group">
+            <button type="button" data-platformer-key="left" aria-label="Move left">◀</button>
+            <button type="button" data-platformer-key="right" aria-label="Move right">▶</button>
+        </div>
+        <div class="pt-group">
+            <button type="button" class="jump" data-platformer-key="jump" aria-label="Jump">JUMP ↗</button>
+        </div>
+    </div>
+
     <!-- Admin Trigger -->
     <button id="btn-admin-trigger" onclick="openAdminPanel()">Admin</button>
 
@@ -449,6 +490,7 @@
     <div id="modeSelectPopup" class="overlay-screen" style="z-index: 20;">
         <h2>Select Mode</h2>
         <div class="btn-grid">
+            <button id="btn-platformer" class="btn-mode btn-platformer" onclick="selectMode('platformer')">◈ THE LONG RUN — 120 SECTORS PLATFORMER</button>
             <!-- Row 1 -->
             <button id="btn-survival" class="btn-mode selected" onclick="selectMode('survival')">Survival</button>
             <button id="btn-collector" class="btn-mode" onclick="selectMode('collector')">Collector</button>
@@ -1046,7 +1088,33 @@
         try { storyProgress = Math.max(0, Math.min(storyMissions.length, parseInt(localStorage.getItem(STORY_PROGRESS_KEY) || '0', 10) || 0)); } catch (_) { storyProgress = 0; }
         try { const saved = JSON.parse(localStorage.getItem(STORY_UPGRADES_KEY) || '{}'); storyPerks = { aegis: Math.max(0, Math.min(3, Number(saved.aegis)||0)), overclock: Math.max(0, Math.min(3, Number(saved.overclock)||0)), plating: Math.max(0, Math.min(3, Number(saved.plating)||0)) }; } catch (_) {}
 
+        const PLATFORMER_BIOMES = [
+            { name: 'NEON RUINS', sky: '#081526', far: '#122b47', platform: '#37c8d8', glow: '#58f4ff' },
+            { name: 'CRIMSON CAUSEWAY', sky: '#210b19', far: '#4a1428', platform: '#ff526f', glow: '#ff7387' },
+            { name: 'FROZEN OVERPASS', sky: '#071a2d', far: '#153b57', platform: '#8de8ff', glow: '#baf5ff' },
+            { name: 'TOXIC GARDENS', sky: '#071d18', far: '#123f32', platform: '#61eaa2', glow: '#9dffb5' },
+            { name: 'FOUNDRY DEPTHS', sky: '#241108', far: '#512411', platform: '#ff9c45', glow: '#ffd166' },
+            { name: 'STORM RAIL', sky: '#11152c', far: '#262d5d', platform: '#a59bff', glow: '#c5bbff' },
+            { name: 'ECLIPSE TOWERS', sky: '#10101e', far: '#25253b', platform: '#d9c8ff', glow: '#f0ddff' },
+            { name: 'CRYSTAL CANYON', sky: '#0c1830', far: '#183b69', platform: '#64a9ff', glow: '#9ce5ff' },
+            { name: 'GRAVITY VAULT', sky: '#190f2b', far: '#311b54', platform: '#d17aff', glow: '#f0a7ff' },
+            { name: 'VOID EXPANSE', sky: '#05070e', far: '#171b2c', platform: '#a8b3c7', glow: '#e0e7ff' },
+            { name: 'CORE REACTOR', sky: '#210910', far: '#4d1025', platform: '#ff405d', glow: '#ff8295' },
+            { name: 'FINAL ASCENT', sky: '#071b2b', far: '#123b50', platform: '#fff0a6', glow: '#fff8d5' }
+        ];
+        const PLATFORMER_WORLD_LENGTH = 108000;
+        let platformerState = {
+            initialized: false, worldWidth: PLATFORMER_WORLD_LENGTH, platforms: [], spikes: [], coins: [], shards: [],
+            enemies: [], checkpoints: [], springs: [], guardians: [], exit: null,
+            cameraX: 0, vx: 0, vy: 0, facing: 1, jumps: 0, grounded: false, lives: 5, maxLives: 5,
+            invuln: 0, coinsCollected: 0, shardsCollected: 0, distanceBest: 0,
+            checkpointIndex: 0, checkpointX: 0, checkpointY: 0,
+            frame: 0, banner: 'THE LONG RUN', bannerTimer: 200, lastSector: 1,
+            lastPlatformY: 0, finished: false, deaths: 0, totalGuardians: 0
+        };
+
         const modes = {
+            platformer: { label: 'The Long Run', desc: 'A huge side-scrolling platform adventure across 120 sectors and 12 biomes. Jump gaps, stomp guardians, find crystals and checkpoints, and reach the final portal.', hint: 'A / D or ← / → to move • SPACE / W / ↑ to jump • Double-jump • Touch controls on mobile' },
             survival: { label: "Survival", desc: "Survive as long as possible. Enemies chase you.", hint: "WASD to Move • Click to Dash" },
             collector: { label: "Collector", desc: "Collect green orbs to score. Avoid the red cubes.", hint: "WASD to Move • Click to Dash" },
             ricochet: { label: "Ricochet", desc: "Enemies bounce blindly off walls. Dodge them.", hint: "WASD to Move • Click to Dash" },
@@ -1339,7 +1407,13 @@
             if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) e.preventDefault();
             const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
             if (Object.prototype.hasOwnProperty.call(keys, key)) keys[key] = true;
-            if (e.key === " " && isRunning && !isPaused) handleAbility();
+            if (e.key === " " && isRunning && !isPaused) {
+                if (selectedMode === 'platformer') platformerJump();
+                else handleAbility();
+            }
+            if ((e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') && isRunning && !isPaused && selectedMode === 'platformer') {
+                if (!e.repeat) platformerJump();
+            }
             if (e.key === "Shift" && isRunning && !isPaused && selectedMode === 'bossfight') triggerBossDash();
         });
 
@@ -1355,11 +1429,40 @@
 
         window.addEventListener('mousedown', (e) => {
             window.focus(); // Focus game on click
+            if (e.target && e.target.closest && e.target.closest('#platformerTouchControls')) return;
             mouse.down = true;
             if (isRunning && !isPaused) {
-                handleAbility();
+                if (selectedMode === 'platformer') platformerJump();
+                else handleAbility();
             }
         });
+
+        const platformerControls = document.getElementById('platformerTouchControls');
+        if (platformerControls) {
+            platformerControls.querySelectorAll('[data-platformer-key]').forEach(button => {
+                const action = button.dataset.platformerKey;
+                const down = event => {
+                    event.preventDefault(); event.stopPropagation();
+                    if (!isRunning || selectedMode !== 'platformer') return;
+                    if (action === 'left') keys.a = true;
+                    else if (action === 'right') keys.d = true;
+                    else if (action === 'jump') platformerJump();
+                    if (button.setPointerCapture && event.pointerId != null) {
+                        try { button.setPointerCapture(event.pointerId); } catch (_) {}
+                    }
+                };
+                const up = event => {
+                    event.preventDefault(); event.stopPropagation();
+                    if (action === 'left') keys.a = false;
+                    if (action === 'right') keys.d = false;
+                };
+                button.addEventListener('pointerdown', down);
+                button.addEventListener('pointerup', up);
+                button.addEventListener('pointercancel', up);
+                button.addEventListener('lostpointercapture', up);
+                button.addEventListener('contextmenu', event => event.preventDefault());
+            });
+        }
         window.addEventListener('mouseup', () => mouse.down = false);
 
         function handleAbility() {
@@ -2477,12 +2580,407 @@
             frameCount++;
         }
 
+        // --- The Long Run: a full side-scrolling platformer with a deterministic, very long world. ---
+        function platformerRandom(seedState) {
+            seedState.value = (seedState.value * 1664525 + 1013904223) >>> 0;
+            return seedState.value / 4294967296;
+        }
+
+        function buildPlatformerWorld() {
+            const st = platformerState;
+            st.platforms = []; st.spikes = []; st.coins = []; st.shards = [];
+            st.enemies = []; st.checkpoints = []; st.springs = []; st.guardians = [];
+            st.exit = null; st.totalGuardians = 0;
+            const seed = { value: 0x51A7C0DE };
+            const h = Math.max(420, canvas.height);
+            const floorMin = Math.max(155, Math.floor(h * 0.37));
+            const floorMax = h - 72;
+            let x = 0;
+            let y = floorMax;
+            let index = 0;
+            let lastMain = null;
+            while (x < PLATFORMER_WORLD_LENGTH - 1050) {
+                const width = 280 + platformerRandom(seed) * 150;
+                if (index > 0) y = Math.max(floorMin, Math.min(floorMax, y + (platformerRandom(seed) - 0.5) * 95));
+                const main = { x, y, w: width, h: 22, type: 'main', index, baseX: x, baseY: y, colorIndex: Math.floor(x / (PLATFORMER_WORLD_LENGTH / PLATFORMER_BIOMES.length)) };
+                st.platforms.push(main); lastMain = main;
+
+                // Coin trails make the safest route readable; blue shards reward harder jumps.
+                const coinCount = 2 + Math.floor(platformerRandom(seed) * 3);
+                for (let c = 0; c < coinCount; c++) {
+                    st.coins.push({ x: x + 44 + c * ((width - 80) / Math.max(1, coinCount - 1)), y: y - 36 - (c % 2) * 5, r: 8, taken: false, pulse: platformerRandom(seed) * 6 });
+                }
+                if (index % 3 === 1 || platformerRandom(seed) > 0.84) {
+                    st.shards.push({ x: x + width * (0.28 + platformerRandom(seed) * 0.48), y: Math.max(68, y - 105 - platformerRandom(seed) * 48), r: 10, taken: false, pulse: platformerRandom(seed) * 6 });
+                }
+
+                // Optional high routes, moving platforms, spring pads, and spikes add variety.
+                if (index % 2 === 0) {
+                    const pw = 95 + platformerRandom(seed) * 100;
+                    const px = x + 24 + platformerRandom(seed) * Math.max(18, width - pw - 30);
+                    const py = Math.max(88, y - (92 + platformerRandom(seed) * 96));
+                    st.platforms.push({ x: px, y: py, w: pw, h: 14, type: index % 5 === 0 ? 'moving' : 'upper', baseX: px, baseY: py, range: 30 + platformerRandom(seed) * 44, phase: platformerRandom(seed) * Math.PI * 2, speed: 0.018 + platformerRandom(seed) * 0.014, colorIndex: main.colorIndex });
+                    if (index % 4 === 0) st.shards.push({ x: px + pw / 2, y: py - 27, r: 10, taken: false, pulse: 0 });
+                }
+                if (index > 2 && index % 4 !== 0 && platformerRandom(seed) > 0.70) {
+                    const spikeW = 28 + platformerRandom(seed) * 28;
+                    const sx = x + 70 + platformerRandom(seed) * Math.max(10, width - spikeW - 120);
+                    st.spikes.push({ x: sx, y: y - 18, w: spikeW, h: 18, platformIndex: index });
+                }
+                if (index > 3 && index % 5 === 2) {
+                    const ex = x + width * (0.38 + platformerRandom(seed) * 0.30);
+                    st.enemies.push({ x: ex, y: y - 28, w: 28, h: 28, minX: x + 12, maxX: x + width - 40, vx: platformerRandom(seed) > 0.5 ? 1.05 : -1.05, hp: 1, guardian: false, alive: true, phase: platformerRandom(seed) * 6 });
+                }
+                if (index > 0 && index % 14 === 0) {
+                    st.checkpoints.push({ x: x + 22, y: y - 48, platformIndex: index, activated: false, pulse: 0 });
+                }
+                // A major guardian locks the route roughly once per biome. Stomp it several times.
+                if (index > 0 && index % 23 === 19) {
+                    const gx = x + width * 0.55;
+                    const guardian = { x: gx, y: y - 54, w: 54, h: 54, minX: x + 55, maxX: x + width - 70, vx: 1.2 + (index % 3) * 0.25, hp: 3 + Math.floor(index / 60), maxHp: 3 + Math.floor(index / 60), guardian: true, alive: true, gateX: x + width - 18, platformIndex: index, phase: 0 };
+                    st.enemies.push(guardian); st.guardians.push(guardian); st.totalGuardians++;
+                }
+                if (index > 0 && index % 9 === 4) st.springs.push({ x: x + width * 0.70, y: y - 12, w: 28, h: 12, used: false });
+                x += width + 45 + platformerRandom(seed) * 62;
+                index++;
+            }
+            // Finish the run with a generous final causeway and a final multi-hit guardian.
+            const finalX = (lastMain ? lastMain.x + lastMain.w + 48 : 0);
+            const finalY = lastMain ? lastMain.y : floorMax;
+            st.platforms.push({ x: finalX, y: finalY, w: 950, h: 24, type: 'final', baseX: finalX, baseY: finalY, colorIndex: PLATFORMER_BIOMES.length - 1 });
+            const finalGuardian = { x: finalX + 355, y: finalY - 62, w: 62, h: 62, minX: finalX + 230, maxX: finalX + 565, vx: 1.7, hp: 10, maxHp: 10, guardian: true, finalGuardian: true, alive: true, gateX: finalX + 610, platformIndex: index, phase: 0 };
+            st.enemies.push(finalGuardian); st.guardians.push(finalGuardian); st.totalGuardians++;
+            st.worldWidth = finalX + 950;
+            st.exit = { x: st.worldWidth - 112, y: finalY - 67, r: 24, pulse: 0 };
+            st.lastPlatformY = finalY;
+            st.initialized = true;
+        }
+
+        function initPlatformerMode() {
+            const st = platformerState;
+            buildPlatformerWorld();
+            st.vx = 0; st.vy = 0; st.facing = 1; st.jumps = 0; st.grounded = true;
+            st.lives = st.maxLives = 5; st.invuln = 70; st.coinsCollected = 0; st.shardsCollected = 0;
+            st.frame = 0; st.banner = 'WELCOME TO THE LONG RUN'; st.bannerTimer = 200; st.lastSector = 1; st.finished = false;
+            st.cameraX = 0; st.checkpointIndex = 0; st.checkpointX = 0; st.checkpointY = st.lastPlatformY;
+            try {
+                const saved = JSON.parse(localStorage.getItem('redCubePlatformerCheckpoint_v2') || 'null');
+                if (saved && Number.isInteger(saved.index) && saved.index > 0 && st.checkpoints[saved.index - 1]) {
+                    st.checkpointIndex = saved.index;
+                    const cp = st.checkpoints[saved.index - 1]; cp.activated = true;
+                    st.checkpointX = cp.x + 10; st.checkpointY = cp.y + 48;
+                    st.banner = `RESUMING AT CHECKPOINT ${String(st.checkpointIndex).padStart(2,'0')}`;
+                }
+                st.distanceBest = Math.max(0, Number(localStorage.getItem('redCubePlatformerBest_v2')) || 0);
+            } catch (_) {}
+            player.size = 24; player.color = '#67edff'; player.speed = 5.5;
+            player.x = st.checkpointX + 16;
+            const floor = st.platforms.find(pl => pl.type === 'main' && player.x >= pl.x && player.x <= pl.x + pl.w) || st.platforms[0];
+            player.y = floor ? floor.y - player.size : canvas.height - 100;
+            st.checkpointY = player.y;
+            player.dx = 0; player.dy = 0; player.velX = 0; player.velY = 0;
+            const touch = document.getElementById('platformerTouchControls');
+            if (touch) touch.style.display = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? 'flex' : 'none';
+            scoreEl.style.display = ''; highScoreEl.style.display = ''; controlsHint.style.display = '';
+            scoreEl.style.fontSize = '22px'; scoreEl.style.marginTop = '0';
+            highScoreEl.style.fontSize = '12px';
+            controlsHint.innerText = modes.platformer.hint;
+            currentModeDisplay.innerText = modes.platformer.label;
+        }
+
+        function platformerJump() {
+            const st = platformerState;
+            if (selectedMode !== 'platformer' || !isRunning || isPaused || st.finished) return;
+            if (st.grounded || st.jumps < 2) {
+                st.vy = st.jumps === 0 ? -13.2 : -11.3;
+                st.jumps++;
+                st.grounded = false;
+                createPlatformerBurst(player.x + player.size / 2, player.y + player.size, '#8ef8ff', 6);
+            }
+        }
+
+        function createPlatformerBurst(x, y, color, count=10) {
+            for (let i = 0; i < count; i++) particles.push({ x, y, vx: (Math.random() - .5) * 4, vy: -Math.random() * 3, life: .7, color });
+        }
+
+        function platformerHurt(reason) {
+            const st = platformerState;
+            if (godMode || st.invuln > 0 || st.finished) return;
+            st.lives--;
+            st.deaths++;
+            createExplosion(player.x + player.size / 2, player.y + player.size / 2, '#ff526f', 24);
+            if (st.lives <= 0) {
+                scoreEl.textContent = 'RUN OVER';
+                highScoreEl.textContent = `Reached sector ${Math.min(120, Math.floor(player.x / (st.worldWidth / 120)) + 1)} • ${st.coinsCollected} credits`;
+                gameOver();
+                return;
+            }
+            player.x = st.checkpointX + 16;
+            const floor = st.platforms.find(pl => pl.type === 'main' && player.x >= pl.x - 2 && player.x <= pl.x + pl.w + 2) || st.platforms[0];
+            player.y = floor ? floor.y - player.size : canvas.height - 100;
+            st.checkpointY = player.y;
+            st.vx = 0; st.vy = 0; st.jumps = 0; st.grounded = true; st.invuln = 90;
+            st.cameraX = Math.max(0, player.x - canvas.width * .32);
+            st.banner = reason || 'CHECKPOINT RESTART'; st.bannerTimer = 100;
+        }
+
+        function platformerSectorAt(x) {
+            return Math.min(120, Math.max(1, Math.floor(x / (platformerState.worldWidth / 120)) + 1));
+        }
+
+        function updatePlatformer(elapsed) {
+            const st = platformerState;
+            if (!st.initialized) initPlatformerMode();
+            st.frame++;
+            const sector = platformerSectorAt(player.x);
+            const biomeIndex = Math.min(PLATFORMER_BIOMES.length - 1, Math.floor((sector - 1) / 10));
+            if (sector !== st.lastSector) {
+                st.lastSector = sector;
+                st.banner = `SECTOR ${String(sector).padStart(3,'0')}  •  ${PLATFORMER_BIOMES[biomeIndex].name}`;
+                st.bannerTimer = 140;
+            }
+            if (st.bannerTimer > 0) st.bannerTimer--;
+            if (st.invuln > 0) st.invuln--;
+            if (st.exit) st.exit.pulse += .08;
+
+            // Smooth horizontal control with a little air control.
+            const input = (keys.d || keys.ArrowRight || keys.l ? 1 : 0) - (keys.a || keys.ArrowLeft || keys.j ? 1 : 0);
+            if (input) { st.vx += input * (st.grounded ? .58 : .39); st.facing = input; }
+            else st.vx *= st.grounded ? .78 : .94;
+            st.vx = Math.max(-6.3, Math.min(6.3, st.vx));
+            const prevY = player.y;
+            const prevBottom = player.y + player.size;
+            const prevVy = st.vy;
+
+            // Moving platforms sweep between stable endpoints.
+            for (const pl of st.platforms) {
+                if (pl.type === 'moving') {
+                    pl.phase += pl.speed;
+                    pl.x = pl.baseX + Math.sin(pl.phase) * pl.range;
+                    pl.y = pl.baseY + Math.sin(pl.phase * .73) * 12;
+                }
+            }
+            player.x = Math.max(0, Math.min(st.worldWidth - player.size, player.x + st.vx));
+            st.vy = Math.min(16, st.vy + .58);
+            player.y += st.vy;
+            st.grounded = false;
+
+            // Landing detection uses the previous frame's feet so platform undersides don't catch jumps.
+            if (st.vy >= 0) {
+                let landing = null;
+                for (const pl of st.platforms) {
+                    if (player.x + player.size > pl.x + 3 && player.x < pl.x + pl.w - 3 &&
+                        prevBottom <= pl.y + 10 && player.y + player.size >= pl.y && player.y < pl.y + pl.h + 20) {
+                        if (!landing || pl.y < landing.y) landing = pl;
+                    }
+                }
+                if (landing) {
+                    player.y = landing.y - player.size;
+                    st.vy = 0; st.grounded = true; st.jumps = 0;
+                    if (landing.type === 'moving') player.x += Math.cos(landing.phase) * landing.speed * landing.range;
+                }
+            }
+
+            // Spring pads bounce the player high enough to reach optional secret platforms.
+            for (const spring of st.springs) {
+                const floor = st.platforms.find(pl => pl.type === 'main' && spring.x >= pl.x && spring.x <= pl.x + pl.w && Math.abs((pl.y - spring.h) - spring.y) < 5);
+                if (floor && player.x + player.size > spring.x && player.x < spring.x + spring.w &&
+                    player.y + player.size >= spring.y - 10 && player.y + player.size <= spring.y + spring.h + 10 && st.vy >= 0) {
+                    st.vy = -17.5; st.jumps = 1; st.grounded = false; spring.used = true;
+                    createPlatformerBurst(spring.x + spring.w/2, spring.y, '#ffd166', 14);
+                }
+            }
+
+            // Hazard spikes are fair: they only hurt on actual contact and checkpoint respawns grant invulnerability.
+            for (const spike of st.spikes) {
+                if (player.x + player.size - 4 > spike.x && player.x + 4 < spike.x + spike.w &&
+                    player.y + player.size > spike.y && player.y < spike.y + spike.h + 8) {
+                    platformerHurt('SPIKE TRAP'); break;
+                }
+            }
+            if (player.y > canvas.height + 90) platformerHurt('FELL INTO THE VOID');
+
+            // Walkers patrol a platform. Stomp from above to defeat them; guardians require several hits.
+            for (const en of st.enemies) {
+                if (!en.alive) continue;
+                en.phase += .05;
+                en.x += en.vx;
+                if (en.x < en.minX) { en.x = en.minX; en.vx = Math.abs(en.vx); }
+                if (en.x > en.maxX) { en.x = en.maxX; en.vx = -Math.abs(en.vx); }
+                if (en.guardian) en.y += Math.sin(en.phase) * .14;
+                const overlap = player.x + player.size > en.x + 3 && player.x < en.x + en.w - 3 && player.y + player.size > en.y + 3 && player.y < en.y + en.h - 2;
+                if (!overlap || st.invuln > 0) continue;
+                if (prevVy > 1.2 && prevBottom <= en.y + 16) {
+                    if (en.guardian) {
+                        en.hp--;
+                        createExplosion(en.x + en.w/2, en.y + 4, '#ffd166', 16);
+                        st.vy = -10.5; st.jumps = 1; st.grounded = false;
+                        st.banner = en.hp > 0 ? `GUARDIAN HIT — ${en.hp} REMAINING` : 'GUARDIAN DEFEATED — ROUTE OPEN';
+                        st.bannerTimer = 100;
+                        if (en.hp <= 0) {
+                            en.alive = false; currentScore += 500; st.coinsCollected += 3;
+                            createExplosion(en.x + en.w/2, en.y + en.h/2, '#58f4ff', 38);
+                        }
+                    } else {
+                        en.alive = false; currentScore += 40; st.coinsCollected++;
+                        createExplosion(en.x + en.w/2, en.y + en.h/2, '#ff526f', 16);
+                        st.vy = -9.5; st.jumps = 1; st.grounded = false;
+                    }
+                } else {
+                    platformerHurt(en.guardian ? 'GUARDIAN STRIKE' : 'CUBE COLLISION');
+                    break;
+                }
+            }
+
+            // Guardians seal their platform's far edge until the player defeats them.
+            for (const g of st.guardians) {
+                if (g.alive && player.x + player.size > g.gateX - 5 && player.x < g.gateX + 20) {
+                    player.x = Math.min(player.x, g.gateX - player.size - 6);
+                    st.vx = Math.min(0, st.vx);
+                }
+            }
+
+            // Collect all credits and memory crystals within touch range.
+            for (const coin of st.coins) {
+                if (coin.taken) continue;
+                coin.pulse += .08;
+                if (Math.hypot(player.x + player.size/2 - coin.x, player.y + player.size/2 - coin.y) < player.size/2 + coin.r + 2) {
+                    coin.taken = true; st.coinsCollected++; currentScore += 10;
+                    createPlatformerBurst(coin.x, coin.y, '#ffd166', 5);
+                }
+            }
+            for (const shard of st.shards) {
+                if (shard.taken) continue;
+                shard.pulse += .07;
+                if (Math.hypot(player.x + player.size/2 - shard.x, player.y + player.size/2 - shard.y) < player.size/2 + shard.r + 3) {
+                    shard.taken = true; st.shardsCollected++; currentScore += 100;
+                    if (st.lives < st.maxLives) st.lives++;
+                    createPlatformerBurst(shard.x, shard.y, '#58f4ff', 20);
+                    st.banner = 'MEMORY CRYSTAL +100 • RESTORE 1 LIFE'; st.bannerTimer = 90;
+                }
+            }
+
+            for (const cp of st.checkpoints) {
+                cp.pulse += .06;
+                if (!cp.activated && player.x + player.size/2 >= cp.x) {
+                    cp.activated = true; st.checkpointIndex = st.checkpoints.indexOf(cp) + 1;
+                    st.checkpointX = cp.x; st.checkpointY = cp.y + 48;
+                    st.lives = st.maxLives;
+                    try { localStorage.setItem('redCubePlatformerCheckpoint_v2', JSON.stringify({index: st.checkpointIndex, x: cp.x})); } catch (_) {}
+                    st.banner = `CHECKPOINT ${String(st.checkpointIndex).padStart(2,'0')} SECURED`; st.bannerTimer = 160;
+                    createPlatformerBurst(cp.x, cp.y, '#65ff9a', 24);
+                }
+            }
+
+            st.cameraX = Math.max(0, Math.min(st.worldWidth - canvas.width, player.x - canvas.width * .34));
+            const best = Math.max(st.distanceBest, player.x);
+            if (best > st.distanceBest) {
+                st.distanceBest = best;
+                try { localStorage.setItem('redCubePlatformerBest_v2', String(Math.floor(best))); } catch (_) {}
+            }
+            scoreEl.textContent = `DISTANCE ${(player.x / 1000).toFixed(1)} km`;
+            highScoreEl.textContent = `SECTOR ${String(sector).padStart(3,'0')}/120  •  GEMS ${st.shardsCollected}  •  CREDITS ${st.coinsCollected}  •  LIVES ${st.lives}`;
+
+            // Keep a normal particle update without running top-down combat logic.
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const part = particles[i]; part.x += part.vx; part.y += part.vy; part.life -= .035;
+                if (part.life <= 0) particles.splice(i, 1);
+            }
+            if (player.x + player.size >= st.exit.x && st.guardians.every(g => !g.alive)) finishPlatformerMode();
+            frameCount++;
+            if (elapsed >= 5 && !bossPlayedModes.has(selectedMode)) markModePlayedForBoss();
+        }
+
+        function finishPlatformerMode() {
+            const st = platformerState;
+            if (st.finished) return;
+            st.finished = true; isRunning = false;
+            try { localStorage.setItem('redCubePlatformerCheckpoint_v2', JSON.stringify({index: st.checkpoints.length, x: st.exit.x})); } catch (_) {}
+            const title = document.getElementById('gameOverTitle');
+            if (title) { title.innerText = 'THE LONG RUN — COMPLETE'; title.style.color = '#58f4ff'; }
+            finalScoreEl.innerText = `You crossed all 120 sectors and ${PLATFORMER_BIOMES.length} biomes. ${st.coinsCollected} credits, ${st.shardsCollected} memory crystals, ${st.deaths} knockouts. The final gate has opened.`;
+            document.getElementById('btnRetry').style.display = 'block';
+            gameOverScreen.style.display = 'block';
+            const touch = document.getElementById('platformerTouchControls'); if (touch) touch.style.display = 'none';
+            draw();
+        }
+
+        function drawPlatformer() {
+            const st = platformerState;
+            const w = canvas.width, h = canvas.height, cam = st.cameraX || 0;
+            const sector = platformerSectorAt(player.x);
+            const biome = PLATFORMER_BIOMES[Math.min(PLATFORMER_BIOMES.length-1, Math.floor((sector - 1) / 10))];
+            ctx.fillStyle = biome.sky; ctx.fillRect(0,0,w,h);
+            // Layered distant city silhouettes move slower than the camera.
+            for (let layer = 0; layer < 3; layer++) {
+                const factor = .12 + layer * .12; const base = h - 54 + layer * 9;
+                ctx.fillStyle = layer === 0 ? 'rgba(55,90,145,.12)' : (layer === 1 ? biome.far : 'rgba(3,8,20,.82)');
+                const blockW = 90 + layer * 25, offset = -((cam * factor) % (blockW + 12));
+                for (let bx = offset; bx < w + blockW; bx += blockW + 12) {
+                    const bh = 60 + ((Math.floor((bx + cam*factor) / (blockW+12)) * 31 + layer * 17) % 170);
+                    ctx.fillRect(bx, base - bh, blockW, bh);
+                    if (layer > 0) {
+                        ctx.fillStyle = 'rgba(120,220,255,.13)';
+                        for (let wy = base-bh+12; wy < base-10; wy += 18) ctx.fillRect(bx+9,wy,5,7);
+                        ctx.fillStyle = layer === 1 ? biome.far : 'rgba(3,8,20,.82)';
+                    }
+                }
+            }
+            // Stars/parallax dots.
+            for (let i=0;i<85;i++) {
+                const sx = ((i*173 - cam*.22) % (w+60) + w + 60) % (w+60);
+                const sy = (i*71) % Math.max(150,h*.7);
+                ctx.globalAlpha = .18 + (i%5)*.1; ctx.fillStyle = '#dffaff'; ctx.fillRect(sx,sy, i%7===0?3:1.5, i%7===0?3:1.5);
+            }
+            ctx.globalAlpha = 1;
+            // Void depth and far parallax warning glow.
+            const g = ctx.createLinearGradient(0,h-90,0,h); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.65)'); ctx.fillStyle=g;ctx.fillRect(0,h-90,w,90);
+
+            const visible = (x, width=0) => x + width >= cam - 80 && x <= cam + w + 80;
+            // Platforms have biome-specific trim and glowing edges.
+            for (const pl of st.platforms) {
+                if (!visible(pl.x,pl.w)) continue;
+                const sx=pl.x-cam, color=PLATFORMER_BIOMES[Math.min(PLATFORMER_BIOMES.length-1,pl.colorIndex||0)].platform;
+                ctx.fillStyle=pl.type==='moving'?'#2b3755':(pl.type==='final'?'#3e3647':'#172638');
+                ctx.fillRect(sx,pl.y,pl.w,pl.h);
+                ctx.fillStyle=color;ctx.fillRect(sx,pl.y,pl.w,3);
+                ctx.fillStyle='rgba(255,255,255,.09)';ctx.fillRect(sx+5,pl.y+pl.h-5,Math.max(0,pl.w-10),2);
+                if(pl.type==='moving'){ctx.strokeStyle=biome.glow;ctx.lineWidth=1.5;ctx.strokeRect(sx,pl.y,pl.w,pl.h);}
+            }
+            // Spike rows.
+            for(const sp of st.spikes){if(!visible(sp.x,sp.w))continue;const sx=sp.x-cam;ctx.fillStyle='#ff526f';ctx.shadowColor='#ff244a';ctx.shadowBlur=10;const count=Math.max(2,Math.floor(sp.w/12));for(let i=0;i<count;i++){const tw=sp.w/count;ctx.beginPath();ctx.moveTo(sx+i*tw,sp.y+sp.h);ctx.lineTo(sx+i*tw+tw/2,sp.y);ctx.lineTo(sx+(i+1)*tw,sp.y+sp.h);ctx.closePath();ctx.fill();}ctx.shadowBlur=0;}
+            // Spring pads.
+            for(const sp of st.springs){if(!visible(sp.x,sp.w))continue;const sx=sp.x-cam;ctx.fillStyle=sp.used?'#6e5533':'#ffd166';ctx.fillRect(sx,sp.y,sp.w,sp.h);ctx.strokeStyle='#fff0b7';ctx.strokeRect(sx,sp.y,sp.w,sp.h);}
+            // Credits and rare memory crystals.
+            for(const coin of st.coins){if(coin.taken||!visible(coin.x,coin.r*2))continue;const bob=Math.sin(coin.pulse)*3,sx=coin.x-cam;ctx.save();ctx.translate(sx,coin.y+bob);ctx.shadowColor='#ffd166';ctx.shadowBlur=10;ctx.fillStyle='#ffd166';ctx.beginPath();ctx.arc(0,0,coin.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#fff4c2';ctx.fillRect(-2,-5,3,10);ctx.restore();}
+            for(const shard of st.shards){if(shard.taken||!visible(shard.x,shard.r*2))continue;const bob=Math.sin(shard.pulse)*4,sx=shard.x-cam;ctx.save();ctx.translate(sx,shard.y+bob);ctx.rotate(Math.PI/4+shard.pulse*.22);ctx.shadowColor='#58f4ff';ctx.shadowBlur=19;ctx.fillStyle='#58f4ff';ctx.fillRect(-shard.r,-shard.r,shard.r*2,shard.r*2);ctx.strokeStyle='#fff';ctx.strokeRect(-shard.r,-shard.r,shard.r*2,shard.r*2);ctx.restore();}
+            // Checkpoint flags are persistent and clearly show active saves.
+            for(const cp of st.checkpoints){if(!visible(cp.x,28))continue;const sx=cp.x-cam;ctx.strokeStyle=cp.activated?'#65ff9a':'#7d8da4';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(sx,cp.y+45);ctx.lineTo(sx,cp.y-12);ctx.stroke();ctx.fillStyle=cp.activated?'#65ff9a':'#74839a';ctx.beginPath();ctx.moveTo(sx,cp.y-11);ctx.lineTo(sx+28,cp.y);ctx.lineTo(sx,cp.y+10);ctx.closePath();ctx.fill();if(cp.activated){ctx.fillStyle='#aaffca';ctx.font='bold 10px Segoe UI';ctx.fillText('SAVED',sx-20,cp.y+58);}}
+            // Patrol cubes and big gate guardians.
+            for(const en of st.enemies){if(!en.alive||!visible(en.x,en.w))continue;const sx=en.x-cam;ctx.save();ctx.shadowColor=en.guardian?'#ff244a':'#a71934';ctx.shadowBlur=en.guardian?24:12;ctx.fillStyle=en.guardian?(en.finalGuardian?'#ff294f':'#cf2848'):'#f5445f';ctx.fillRect(sx,en.y,en.w,en.h);ctx.shadowBlur=0;ctx.strokeStyle=en.guardian?'#ffd166':'#ff9aa7';ctx.lineWidth=en.guardian?3:1.5;ctx.strokeRect(sx,en.y,en.w,en.h);if(en.guardian){ctx.fillStyle='#fff';ctx.fillRect(sx+en.w*.24,en.y+en.h*.32,7,7);ctx.fillRect(sx+en.w*.62,en.y+en.h*.32,7,7);ctx.fillStyle='#3a0914';ctx.fillRect(sx,en.y-12,en.w,5);ctx.fillStyle='#ff4e68';ctx.fillRect(sx,en.y-12,en.w*Math.max(0,en.hp/en.maxHp),5);ctx.strokeStyle='#ffd166';ctx.strokeRect(sx,en.y-12,en.w,5);ctx.fillStyle='#ffe7a1';ctx.font='bold 10px Segoe UI';ctx.textAlign='center';ctx.fillText(en.finalGuardian?'FINAL GUARDIAN':'GUARDIAN',sx+en.w/2,en.y-17);}else{ctx.fillStyle='#270611';ctx.fillRect(sx+7,en.y+8,4,4);ctx.fillRect(sx+en.w-11,en.y+8,4,4);}ctx.restore();}
+            // Boss gate energy wall.
+            for(const g0 of st.guardians){if(!g0.alive||!visible(g0.gateX,8))continue;const gx=g0.gateX-cam;ctx.fillStyle='rgba(255,62,95,.14)';ctx.fillRect(gx-7,80,14,h-120);ctx.strokeStyle='rgba(255,90,120,.65)';ctx.lineWidth=2;ctx.setLineDash([8,8]);ctx.beginPath();ctx.moveTo(gx,80);ctx.lineTo(gx,h-40);ctx.stroke();ctx.setLineDash([]);}
+            // Exit portal at the end of the course.
+            if(st.exit&&visible(st.exit.x,60)){const ex=st.exit.x-cam,ey=st.exit.y,p=1+Math.sin(st.exit.pulse)*.12;ctx.save();ctx.translate(ex,ey);ctx.scale(p,p);ctx.shadowColor='#58f4ff';ctx.shadowBlur=26;ctx.strokeStyle='#d9fbff';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(0,0,24,35,0,0,Math.PI*2);ctx.stroke();ctx.rotate(st.exit.pulse*.4);ctx.strokeStyle='#58f4ff';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,0,13,29,0,0,Math.PI*2);ctx.stroke();ctx.fillStyle='rgba(88,244,255,.25)';ctx.beginPath();ctx.ellipse(0,0,17,27,0,0,Math.PI*2);ctx.fill();ctx.restore();ctx.fillStyle='#d9fbff';ctx.font='bold 12px Segoe UI';ctx.textAlign='center';ctx.fillText('FINAL PORTAL',ex,ey+48);}
+            // Player has a visible invulnerability flicker after damage.
+            const px=player.x-cam;if(st.invuln===0||Math.floor(st.invuln/6)%2===0){ctx.save();ctx.shadowColor=biome.glow;ctx.shadowBlur=20;ctx.fillStyle='#67edff';ctx.fillRect(px,player.y,player.size,player.size);ctx.shadowBlur=0;ctx.strokeStyle='#efffff';ctx.lineWidth=2;ctx.strokeRect(px,player.y,player.size,player.size);ctx.fillStyle='#09202a';ctx.fillRect(px+5,player.y+6,4,4);ctx.fillRect(px+15,player.y+6,4,4);ctx.restore();}
+            // A clear operation banner appears as each sector changes.
+            if(st.bannerTimer>0&&st.banner){ctx.save();ctx.globalAlpha=Math.min(1,st.bannerTimer/18);ctx.fillStyle='rgba(2,9,18,.76)';ctx.fillRect(w*.5-190,118,380,34);ctx.strokeStyle=biome.glow;ctx.strokeRect(w*.5-190,118,380,34);ctx.fillStyle='#f3fdff';ctx.font='bold 13px Segoe UI';ctx.textAlign='center';ctx.fillText(st.banner,w*.5,139);ctx.restore();}
+            // Progress rail: every tick is one sector of the 120-sector journey.
+            const railW=Math.min(600,w-42),railX=(w-railW)/2,railY=42;ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(railX,railY,railW,7);ctx.fillStyle=biome.glow;ctx.fillRect(railX,railY,railW*Math.min(1,player.x/st.worldWidth),7);ctx.strokeStyle='rgba(255,255,255,.42)';ctx.strokeRect(railX,railY,railW,7);ctx.fillStyle='#e5f7ff';ctx.font='bold 11px Segoe UI';ctx.textAlign='left';ctx.fillText(`SECTOR ${String(sector).padStart(3,'0')} / 120`,railX,railY+23);ctx.textAlign='right';ctx.fillText(biome.name,railX+railW,railY+23);
+            // Heart pips.
+            ctx.textAlign='left';ctx.font='bold 12px Segoe UI';ctx.fillStyle='#ff8295';ctx.fillText('LIVES',16,82);for(let i=0;i<st.maxLives;i++){ctx.fillStyle=i<st.lives?'#ff526f':'rgba(255,255,255,.16)';const hx=63+i*19;ctx.beginPath();ctx.moveTo(hx,75);ctx.lineTo(hx+6,70);ctx.lineTo(hx+12,75);ctx.lineTo(hx+6,84);ctx.closePath();ctx.fill();}
+            ctx.fillStyle='#ffd166';ctx.fillText(`CREDITS ${st.coinsCollected}`,16,105);ctx.fillStyle='#58f4ff';ctx.fillText(`MEMORY ${st.shardsCollected}`,16,124);
+            if(st.invuln>0){ctx.textAlign='right';ctx.fillStyle='#b8c9dc';ctx.fillText('INVULNERABLE',w-18,82);}
+        }
+
         function update() {
             if (!isRunning) return;
             if (isPaused) return;
 
             const now = Date.now();
             const elapsed = (now - startTime - totalPausedTime) / 1000;
+            if (selectedMode === 'platformer') { updatePlatformer(elapsed); return; }
             if (storyActive) updateStoryEvents(elapsed);
             if (elapsed >= 5 && selectedMode !== 'bossfight' && !bossPlayedModes.has(selectedMode)) markModePlayedForBoss();
             if (selectedMode === 'bossfight') {
@@ -3743,6 +4241,7 @@
         }
 
         function draw() {
+            if (selectedMode === 'platformer') { drawPlatformer(); return; }
             // New Background function
             drawBackground();
 
@@ -4268,6 +4767,12 @@
                 highScoreEl.innerText = `Best (${modes[selectedMode].label}/${difficulties[selectedDifficulty].label}): ${scoreValue}${unit}`;
             }
 
+            if (selectedMode === 'platformer' && !platformerState.finished) {
+                const title = document.getElementById('gameOverTitle');
+                if (title) { title.innerText = 'RUN OVER'; title.style.color = '#ff526f'; }
+                finalScoreEl.innerText = `You reached sector ${String(platformerSectorAt(player.x)).padStart(3,'0')} / 120, collected ${platformerState.coinsCollected} credits and ${platformerState.shardsCollected} memory crystals, and defeated ${platformerState.guardians.filter(g => !g.alive).length} guardians. Your last checkpoint is saved.`;
+                const touch = document.getElementById('platformerTouchControls'); if (touch) touch.style.display = 'none';
+            }
             if (storyActive && !storyCompletionTriggered) {
                 document.getElementById('storyUpgradePanel').style.display = 'none';
                 document.getElementById('storyDecisionPanel').style.display = 'none';
@@ -4335,6 +4840,8 @@
             bossRings = [];
             bossFightState.active = false;
             bossFightState.defeated = false;
+            const platformerTouch = document.getElementById('platformerTouchControls'); if (platformerTouch) platformerTouch.style.display = 'none';
+            scoreEl.style.fontSize = '40px'; highScoreEl.style.fontSize = '14px';
             player.x = canvas.width / 2 - player.size/2;
             player.y = canvas.height / 2 - player.size/2;
             player.tail = [];
@@ -4348,7 +4855,7 @@
             startMenu.style.display = 'none';
             gameOverScreen.style.display = 'none';
             gameTitle.style.display = 'block';
-            gameTitle.textContent = storyActive ? `CHAPTER ${storyChapterIndex + 1}: ${storyMissions[storyChapterIndex].title}` : (selectedMode === 'bossfight' ? 'CRIMSON OVERLORD' : 'Survive');
+            gameTitle.textContent = storyActive ? `CHAPTER ${storyChapterIndex + 1}: ${storyMissions[storyChapterIndex].title}` : (selectedMode === 'bossfight' ? 'CRIMSON OVERLORD' : (selectedMode === 'platformer' ? 'THE LONG RUN' : 'Survive'));
             restartGame();
         }
 
@@ -4359,9 +4866,14 @@
             storyOrbCount = 0;
             if (storyActive) resetStoryMissionState();
             const isBossMode = selectedMode === 'bossfight';
+            const isPlatformerMode = selectedMode === 'platformer';
+            const touchControls = document.getElementById('platformerTouchControls');
+            if (touchControls) touchControls.style.display = isPlatformerMode ? 'flex' : 'none';
             scoreEl.style.display = isBossMode ? 'none' : '';
             highScoreEl.style.display = isBossMode ? 'none' : '';
             controlsHint.style.display = isBossMode ? 'none' : '';
+            scoreEl.style.fontSize = isPlatformerMode ? '22px' : '40px';
+            highScoreEl.style.fontSize = isPlatformerMode ? '12px' : '14px';
             enemies = [];
             particles = [];
             orbs = [];
@@ -4444,6 +4956,10 @@
             // Vortex Reset
             vortex.x = canvas.width/2;
             vortex.y = canvas.height/2;
+            if (selectedMode === 'platformer') initPlatformerMode();
+            else {
+                const touch = document.getElementById('platformerTouchControls'); if (touch) touch.style.display = 'none';
+            }
             
             frameCount = 0;
             difficultyMultiplier = 1;
@@ -4462,8 +4978,8 @@
                 gameTitle.textContent = storyActive ? `CHAPTER ${storyChapterIndex + 1}: ${storyMissions[storyChapterIndex].title}` : 'CRIMSON OVERLORD';
                 initBossFight();
             } else {
-                gameTitle.textContent = storyActive ? `CHAPTER ${storyChapterIndex + 1}: ${storyMissions[storyChapterIndex].title}` : 'Survive';
-                player.color = '#4488ff'; player.speed = 5;
+                gameTitle.textContent = storyActive ? `CHAPTER ${storyChapterIndex + 1}: ${storyMissions[storyChapterIndex].title}` : (selectedMode === 'platformer' ? 'THE LONG RUN' : 'Survive');
+                player.color = selectedMode === 'platformer' ? '#67edff' : '#4488ff'; player.speed = selectedMode === 'platformer' ? 5.5 : 5;
             }
             if (storyActive) {
                 player.speed = Math.min(7.2, player.speed + storyPerks.overclock * 0.55);
