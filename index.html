@@ -754,7 +754,18 @@
         // Game State
         let isRunning = false;
         let isPaused = false;
-        let animationId;
+        let animationId = null;
+        // The entire game simulation runs at a fixed 60 ticks per second.
+        // Rendering may run at 30, 60, 120, 144 Hz, or a variable refresh rate;
+        // none of those display rates should change movement, attacks, spawn rates,
+        // cooldowns, enemy AI, particle lifetimes, or mode timers.
+        const SIMULATION_STEP_MS = 1000 / 60;
+        const MAX_FRAME_DELTA_MS = 250;
+        const MAX_CATCH_UP_STEPS = 15; // 250 ms at 60 simulation ticks/sec
+        let lastFrameTimestamp = null;
+        let simulationAccumulator = 0;
+        // Used only for decorative background motion drawn at the display refresh rate.
+        let renderDeltaScale = 1;
         let startTime;
         let pausedTimeStart = 0;
         let totalPausedTime = 0;
@@ -2799,13 +2810,12 @@
         function updatePlatformer(elapsed) {
             const st = platformerState;
             if (!st.initialized) initPlatformerMode();
-            // All platformer physics are authored in 60 FPS units. Scale by elapsed time
-            // so high-refresh displays do not make movement faster and low-FPS frames do
-            // not cause huge jumps. Cap catch-up to keep collision checks fair after stalls.
-            const frameNow = performance.now();
-            const frameDeltaMs = st.lastUpdateTime ? frameNow - st.lastUpdateTime : 1000 / 60;
-            const dt = st.lastUpdateTime ? (frameDeltaMs > 250 ? 1 : Math.max(0.05, Math.min(4, frameDeltaMs / (1000 / 60)))) : 1;
-            st.lastUpdateTime = frameNow;
+            // This function is called only by the fixed 60 Hz simulation loop.
+            // Platformer values are authored in 60 Hz ticks, so dt must stay 1 here;
+            // measuring wall time inside catch-up ticks would otherwise slow the game
+            // whenever a display rendered below 60 FPS.
+            const dt = 1;
+            st.lastUpdateTime = performance.now();
             st.frame += dt;
             const sector = platformerSectorAt(player.x);
             const biomeIndex = Math.min(PLATFORMER_BIOMES.length - 1, Math.floor((sector - 1) / 10));
@@ -4162,7 +4172,7 @@
                  ctx.fillStyle = '#fff';
                  for (let s of stars) {
                      // Move stars
-                     s.y += s.speed;
+                     s.y += s.speed * renderDeltaScale;
                      if (s.y > canvas.height) {
                          s.y = 0;
                          s.x = Math.random() * canvas.width;
@@ -4176,7 +4186,7 @@
              // Inferno
              if (selectedBackground === 'inferno') {
                  for(let e of embers) {
-                     e.y -= e.speed;
+                     e.y -= e.speed * renderDeltaScale;
                      if (e.y < 0) { e.y = canvas.height; e.x = Math.random() * canvas.width; }
                      ctx.globalAlpha = e.alpha;
                      ctx.fillStyle = '#ffaa00';
@@ -4190,7 +4200,7 @@
                  ctx.strokeStyle = '#00ffff';
                  ctx.lineWidth = 1;
                  for(let r of raindrops) {
-                     r.y += r.speed;
+                     r.y += r.speed * renderDeltaScale;
                      if (r.y > canvas.height) { r.y = -r.len; r.x = Math.random() * canvas.width; }
                      ctx.beginPath();
                      ctx.moveTo(r.x, r.y);
@@ -4205,7 +4215,7 @@
                  const cy = canvas.height / 2;
                  ctx.fillStyle = '#fff';
                  for (let s of warpStars) {
-                     s.dist += s.speed * (s.dist/100 + 1); // Accelerate as it gets closer
+                     s.dist += s.speed * (s.dist/100 + 1) * renderDeltaScale; // Accelerate as it gets closer
                      if (s.dist > Math.max(canvas.width, canvas.height)) {
                          s.dist = 1;
                          s.angle = Math.random() * Math.PI * 2;
@@ -4221,7 +4231,7 @@
 
              // Waves
              if (selectedBackground === 'waves') {
-                 waveOffset += 0.05;
+                 waveOffset += 0.05 * renderDeltaScale;
                  ctx.lineWidth = 2;
                  for (let i = 0; i < 5; i++) {
                      ctx.beginPath();
@@ -4239,8 +4249,8 @@
              if (selectedBackground === 'snow') {
                  ctx.fillStyle = '#fff';
                  for(let s of snowflakes) {
-                     s.y += s.speed;
-                     s.swayOffset += 0.05;
+                     s.y += s.speed * renderDeltaScale;
+                     s.swayOffset += 0.05 * renderDeltaScale;
                      const sway = Math.sin(s.swayOffset) * s.sway;
                      if(s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; }
                      ctx.globalAlpha = 0.8;
@@ -4256,7 +4266,7 @@
                  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
                  ctx.lineWidth = 1;
                  for(let b of bubbles) {
-                     b.y -= b.speed;
+                     b.y -= b.speed * renderDeltaScale;
                      if(b.y < -b.size) { b.y = canvas.height + b.size; b.x = Math.random() * canvas.width; }
                      ctx.globalAlpha = b.alpha;
                      ctx.beginPath();
@@ -4271,14 +4281,14 @@
                  ctx.font = '16px monospace';
                  ctx.fillStyle = '#0f0';
                  for(let c of binaryCols) {
-                     if(Math.random() > 0.95) {
+                     if(Math.random() > Math.pow(0.95, renderDeltaScale)) {
                          // Add char
                          c.chars.push({ val: Math.random() > 0.5 ? '1' : '0', y: 0, alpha: 1.0 });
                      }
                      for (let i = c.chars.length - 1; i >= 0; i--) {
                          let char = c.chars[i];
-                         char.y += c.speed;
-                         char.alpha -= 0.02;
+                         char.y += c.speed * renderDeltaScale;
+                         char.alpha -= 0.02 * renderDeltaScale;
                          if(char.alpha <= 0) c.chars.splice(i, 1);
                          else {
                              ctx.globalAlpha = char.alpha;
@@ -4291,7 +4301,7 @@
 
              // Tunnel
              if (selectedBackground === 'tunnel') {
-                 tunnelDepth += 2;
+                 tunnelDepth += 2 * renderDeltaScale;
                  if(tunnelDepth >= 100) tunnelDepth = 0;
                  
                  ctx.strokeStyle = '#333';
@@ -4781,10 +4791,59 @@
             // Animation scheduling is managed by loop(), not draw().
         }
 
-        function loop() {
-            if (!isRunning) { animationId = null; return; }
+        function loop(timestamp) {
+            if (!isRunning) {
+                animationId = null;
+                lastFrameTimestamp = null;
+                simulationAccumulator = 0;
+                return;
+            }
+
+            // requestAnimationFrame controls drawing only. Gameplay advances in exact
+            // 1/60-second steps, using the time elapsed since the previous render.
+            const now = Number.isFinite(timestamp) ? timestamp : performance.now();
+            if (lastFrameTimestamp === null) {
+                lastFrameTimestamp = now;
+                simulationAccumulator = 0;
+                renderDeltaScale = 0;
+                try {
+                    draw();
+                } catch (error) {
+                    console.error('Red Cube Survival render stopped:', error);
+                    isRunning = false;
+                    const title = document.getElementById('gameOverTitle');
+                    if (title) { title.innerText = 'GAME ERROR'; title.style.color = '#ff4444'; }
+                    finalScoreEl.innerText = 'The game stopped unexpectedly. Restart and try again.';
+                    gameOverScreen.style.display = 'block';
+                    animationId = null;
+                    return;
+                }
+                if (isRunning) animationId = requestAnimationFrame(loop);
+                return;
+            }
+
+            const rawDelta = now - lastFrameTimestamp;
+            lastFrameTimestamp = now;
+            const frameDelta = Math.max(0, Math.min(MAX_FRAME_DELTA_MS,
+                Number.isFinite(rawDelta) ? rawDelta : SIMULATION_STEP_MS));
+            renderDeltaScale = frameDelta / SIMULATION_STEP_MS;
+
             try {
-                update();
+                if (isPaused) {
+                    // Do not accumulate paused time; unpausing must not fast-forward.
+                    simulationAccumulator = 0;
+                } else {
+                    simulationAccumulator += frameDelta;
+                    let steps = 0;
+                    while (simulationAccumulator + 0.00001 >= SIMULATION_STEP_MS &&
+                           steps < MAX_CATCH_UP_STEPS && isRunning && !isPaused) {
+                        update();
+                        simulationAccumulator -= SIMULATION_STEP_MS;
+                        steps++;
+                    }
+                    if (isPaused || !isRunning) simulationAccumulator = 0;
+                }
+                // Draw at the monitor's refresh rate while simulation stays at 60 Hz.
                 draw();
             } catch (error) {
                 console.error('Red Cube Survival game loop stopped:', error);
@@ -4794,10 +4853,18 @@
                 finalScoreEl.innerText = 'The game stopped unexpectedly. Restart and try again.';
                 gameOverScreen.style.display = 'block';
                 animationId = null;
+                lastFrameTimestamp = null;
+                simulationAccumulator = 0;
                 return;
             }
-            if (isRunning) animationId = requestAnimationFrame(loop);
-            else animationId = null;
+
+            if (isRunning) {
+                animationId = requestAnimationFrame(loop);
+            } else {
+                animationId = null;
+                lastFrameTimestamp = null;
+                simulationAccumulator = 0;
+            }
         }
 
         function gameOver() {
@@ -4942,6 +5009,9 @@
         function restartGame() {
             if (animationId != null) cancelAnimationFrame(animationId);
             animationId = null;
+            lastFrameTimestamp = null;
+            simulationAccumulator = 0;
+            renderDeltaScale = 1;
             storyCompletionTriggered = false;
             storyOrbCount = 0;
             if (storyActive) resetStoryMissionState();
