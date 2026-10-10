@@ -686,6 +686,27 @@
         <div id="storyCommsText">Signal link established.</div>
     </div>
 
+    <div id="storyFieldChoice" role="dialog" aria-modal="true" aria-labelledby="storyFieldChoiceTitle" style="display:none;position:fixed;inset:0;z-index:80;align-items:center;justify-content:center;padding:18px;background:rgba(2,5,12,.88);backdrop-filter:blur(8px);">
+        <section style="width:min(720px,100%);padding:clamp(18px,4vw,30px);border:1px solid rgba(88,244,255,.75);border-radius:18px;background:linear-gradient(145deg,rgba(10,25,42,.98),rgba(27,7,19,.98));box-shadow:0 0 45px rgba(88,244,255,.16);color:#f4f8ff;">
+            <div style="color:#58f4ff;font-size:11px;font-weight:900;letter-spacing:2px;margin-bottom:8px;">LIVE DECISION // CHAPTER 2</div>
+            <h2 id="storyFieldChoiceTitle" style="font-size:clamp(22px,4vw,34px);line-height:1.1;margin:0 0 8px;color:#fff;">WHO DO YOU TRUST?</h2>
+            <p style="font-size:14px;line-height:1.55;color:#c7d3e2;margin:0 0 18px;">Gunfire stops. Vex has opened a narrow breach, but NEXUS is offering a combat patch. You only have time to take one route.</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px;">
+                <button onclick="chooseStoryFieldChoice('vex')" style="text-align:left;min-height:132px;padding:16px;border:1px solid #58f4ff;border-radius:12px;background:rgba(15,85,97,.28);color:#fff;">
+                    <span style="display:block;font-size:12px;font-weight:900;letter-spacing:1px;color:#58f4ff;margin-bottom:8px;">VEX // JAM THE FEED</span>
+                    <span style="display:block;font-size:16px;font-weight:800;margin-bottom:6px;">Break their lock</span>
+                    <span style="display:block;font-size:12px;line-height:1.45;color:#c6d7e7;">Erase a few nearby cubes, survive the next hit, and weaken the Overlord's tracking system.</span>
+                </button>
+                <button onclick="chooseStoryFieldChoice('nexus')" style="text-align:left;min-height:132px;padding:16px;border:1px solid #ff526f;border-radius:12px;background:rgba(118,20,37,.25);color:#fff;">
+                    <span style="display:block;font-size:12px;font-weight:900;letter-spacing:1px;color:#ff7187;margin-bottom:8px;">NEXUS // TAKE THE PATCH</span>
+                    <span style="display:block;font-size:16px;font-weight:800;margin-bottom:6px;">Outrun the pattern</span>
+                    <span style="display:block;font-size:12px;line-height:1.45;color:#e0cbd1;">Gain permanent movement speed, but NEXUS reinforces the final boss to compensate.</span>
+                </button>
+            </div>
+            <p style="color:#ffd166;font-size:11px;line-height:1.5;margin:14px 0 0;">The game is paused while you decide. Your choice is saved with the campaign.</p>
+        </section>
+    </div>
+
     <!-- Game Over Screen -->
     <div id="gameOverScreen" class="overlay-screen">
         <h2 id="gameOverTitle" style="color: #ff4444; margin-top:0;">YOU DIED</h2>
@@ -969,28 +990,29 @@
         },
         {
                 "title": "Station Nine Is Lying",
-                "mode": "blackout",
-                "goal": "survive",
-                "target": 26,
-                "objective": "Survive the blackout for 26 seconds while the station hunts you.",
-                "intro": "Station Nine activates a purge. The screen goes dark, emergency lights strobe, and NEXUS begins calling you by a name you have never heard. Vex finally explains what Courier-09 means.",
-                "recap": "You are not the original courier. You are a recovery copy built from their movement data. Every death was used to train the Overlord.",
-                "winText": "Purge evaded. You finally know what you are.",
+                "mode": "hotzone",
+                "goal": "relays",
+                "target": 3,
+                "objective": "Disable all 3 purge uplinks. The red danger zone will keep shifting while you work.",
+                "intro": "Station Nine initiates a live purge. Three uplinks are feeding your movement pattern to the Overlord. Vex gives you their locations, while NEXUS orders you to stand down. You cannot escape until the uplinks go dark.",
+                "recap": "The purge feed confirms you are a recovery copy built from the original courier’s movement data. Every failed run trained the Overlord to predict you.",
+                "winText": "All three purge uplinks are offline. For the first time, the Overlord loses your live position data.",
                 "beats": [
                         {
                                 "at": 2,
                                 "speaker": "VEX",
-                                "text": "Courier-09 is not a rank. It is the ninth copy. The original died trying to shut this place down."
+                                "text": "Courier-09 is not a rank. It is the ninth copy. Kill the uplinks. If the feed stops, the Overlord has to fight you honestly."
                         },
                         {
                                 "at": 9,
                                 "speaker": "NEXUS CONTROL",
-                                "text": "Your continuity is proof of our success. Keep following the mission."
+                                "text": "Those uplinks are life-support infrastructure. Touch them and you will condemn every remaining process.",
+                                "effect": "reinforcements"
                         },
                         {
                                 "at": 17,
                                 "speaker": "ECHO",
-                                "text": "Control is stalling you. Extraction will close as soon as the purge reaches full power.",
+                                "text": "The red zone is moving toward you. One uplink left? Keep moving—do not let the purge pin you in a corner.",
                                 "effect": "reinforcements"
                         }
                 ]
@@ -1059,10 +1081,11 @@
         let storyBeatIndex = 0;
         let storyCommsTimer = 0;
         let storyShieldCharges = 0;
+        let storyFieldChoiceTriggered = false;
         let storyDamageGrace = 0;
         let storyUpgradeChoiceMade = false;
         let storyPerks = { aegis: 0, overclock: 0, plating: 0 };
-        let storyChoices = { route: '', ally: '', protocol: '' };
+        let storyChoices = { route: '', ally: '', protocol: '', field: '' };
         let storyObjectiveTargets = [];
         let storyRelayCount = 0;
         let storyExitMarker = null;
@@ -1109,7 +1132,7 @@
             cameraX: 0, vx: 0, vy: 0, facing: 1, jumps: 0, grounded: false, lives: 5, maxLives: 5,
             invuln: 0, coinsCollected: 0, shardsCollected: 0, distanceBest: 0,
             checkpointIndex: 0, checkpointX: 0, checkpointY: 0,
-            frame: 0, banner: 'THE LONG RUN', bannerTimer: 200, lastSector: 1,
+            frame: 0, lastUpdateTime: 0, banner: 'THE LONG RUN', bannerTimer: 200, lastSector: 1,
             lastPlatformY: 0, finished: false, deaths: 0, totalGuardians: 0
         };
 
@@ -1660,6 +1683,43 @@
             requestAnimationFrame(() => box.classList.add('active'));
             storyCommsTimer = frames;
         }
+        function showStoryFieldChoice() {
+            const panel = document.getElementById('storyFieldChoice');
+            if (!panel || storyChoices.field) return;
+            storyFieldChoiceTriggered = true;
+            panel.style.display = 'flex';
+            if (isRunning && !isPaused) {
+                isPaused = true;
+                pausedTimeStart = Date.now();
+            }
+        }
+        function chooseStoryFieldChoice(choice) {
+            if (!['vex', 'nexus'].includes(choice) || storyChoices.field || !storyFieldChoiceTriggered) return;
+            storyChoices.field = choice;
+            saveStoryChoices();
+            const panel = document.getElementById('storyFieldChoice');
+            if (panel) panel.style.display = 'none';
+            if (choice === 'vex') {
+                // Vex jams a few nearby cubes and gives a brief protection window.
+                const px = player.x + player.size / 2, py = player.y + player.size / 2;
+                const nearby = enemies.map((e, i) => ({ i, d: Math.hypot(e.x + e.size/2 - px, e.y + e.size/2 - py) }))
+                    .sort((a, b) => a.d - b.d).slice(0, 3).map(v => v.i).sort((a, b) => b - a);
+                for (const i of nearby) killEnemy(i);
+                storyShieldCharges = Math.max(storyShieldCharges, storyPerks.aegis + 1);
+                storyDamageGrace = 135;
+                showStoryComms('VEX // LOCAL LINK', 'Targeting feed cut. I bought you a shield window. The Overlord will have a harder time reading you.', 240);
+            } else {
+                // NEXUS makes a permanent speed patch, but sends reinforcements now.
+                player.speed = Math.min(7.2, player.speed + 0.65);
+                for (let i = 0; i < 3; i++) spawnEnemy();
+                showStoryComms('NEXUS CONTROL', 'Overclock patch installed. If you survive this, you will always move faster. Do not mistake speed for freedom.', 240);
+            }
+            if (isRunning && isPaused) {
+                isPaused = false;
+                totalPausedTime += Math.max(0, Date.now() - pausedTimeStart);
+            }
+            renderStoryMenu();
+        }
         function updateStoryEvents(elapsed) {
             if (!storyActive || storyCompletionTriggered) return;
             if (storyDamageGrace > 0) storyDamageGrace--;
@@ -1673,6 +1733,10 @@
             }
             const mission = storyMissions[storyChapterIndex];
             if (!mission) return;
+            if (storyChapterIndex === 1 && !storyChoices.field && !storyFieldChoiceTriggered && (elapsed >= 8 || storyKillCount >= 4)) {
+                showStoryFieldChoice();
+                return;
+            }
             if (mission.goal === 'relays') {
                 const px = player.x + player.size / 2, py = player.y + player.size / 2;
                 for (const relay of storyObjectiveTargets) {
@@ -1787,7 +1851,7 @@
                 const route = storyChoices.route ? (storyChoices.route === 'core' ? 'CORE' : 'NEXUS') : 'UNDECIDED';
                 const ally = storyChoices.ally ? (storyChoices.ally === 'echo' ? 'ECHO SAVED' : 'VEX TELEMETRY') : 'NO ALLY';
                 const protocol = storyChoices.protocol ? storyChoices.protocol.toUpperCase() : 'UNDECIDED';
-                loadout.innerText = `LOADOUT  •  Aegis ${storyPerks.aegis}  •  Overclock ${storyPerks.overclock}  •  Plating ${storyPerks.plating}\nDECISIONS  •  Signal: ${route}  •  Support: ${ally}  •  Protocol: ${protocol}`;
+                loadout.innerText = `LOADOUT  •  Aegis ${storyPerks.aegis}  •  Overclock ${storyPerks.overclock}  •  Plating ${storyPerks.plating}\nDECISIONS  •  Signal: ${route}  •  Support: ${ally}  •  Protocol: ${protocol}\nFIELD DOCTRINE  •  ${storyChoices.field ? (storyChoices.field === 'vex' ? 'VEX JAMMER / BOSS TRACKING WEAKENED' : 'NEXUS OVERCLOCK / BOSS REINFORCED') : 'NOT SELECTED'}`;
             }
             start.innerText = completed >= storyMissions.length ? 'REPLAY STORY' : completed > 0 ? 'CONTINUE STORY' : 'BEGIN STORY';
         }
@@ -1798,6 +1862,7 @@
             gameOverScreen.style.display = 'none';
             document.getElementById('storyComms').classList.remove('active');
             document.getElementById('storyComms').style.display = 'none';
+            document.getElementById('storyFieldChoice').style.display = 'none';
             storyActive = false;
             renderStoryMenu();
             document.getElementById('storyMenu').style.display = 'block';
@@ -1810,11 +1875,11 @@
             if (storyProgress >= storyMissions.length) {
                 storyProgress = 0;
                 storyPerks = { aegis: 0, overclock: 0, plating: 0 };
-                storyChoices = { route: '', ally: '', protocol: '' };
+                storyChoices = { route: '', ally: '', protocol: '', field: '' };
                 saveStoryProgress(); saveStoryPerks(); saveStoryChoices();
             }
             if (storyProgress === 0) {
-                storyChoices = { route: '', ally: '', protocol: '' };
+                storyChoices = { route: '', ally: '', protocol: '', field: '' };
                 saveStoryChoices();
             }
             // If the browser was refreshed on a chapter-clear screen, restore its unanswered choice.
@@ -1868,8 +1933,11 @@
             startMenu.style.display = 'none';
             gameOverScreen.style.display = 'none';
             storyBeatIndex = 0; storyCommsTimer = 0; storyKillCount = 0; storyOrbCount = 0;
-            storyShieldCharges = storyPerks.aegis;
+            storyShieldCharges = storyPerks.aegis + (storyChoices.field === 'vex' ? 1 : 0);
             storyDamageGrace = 0;
+            storyFieldChoiceTriggered = false;
+            const fieldChoicePanel = document.getElementById('storyFieldChoice');
+            if (fieldChoicePanel) fieldChoicePanel.style.display = 'none';
             storyObjectiveTargets = [];
             storyRelayCount = 0;
             storyExitMarker = null;
@@ -2248,7 +2316,7 @@
             player.velX = 0;
             player.velY = 0;
             bossFightState.bossDashCooldown = 0;
-            const storyBossBaseHp = storyActive && storyChoices.protocol === 'purge' ? 5850 : (storyActive && storyChoices.route === 'nexus' ? 7700 : 7200);
+            const storyBossBaseHp = (storyActive && storyChoices.protocol === 'purge' ? 5850 : (storyActive && storyChoices.route === 'nexus' ? 7700 : 7200)) + (storyActive && storyChoices.field === 'nexus' ? 650 : 0);
             bossFightState.hp = storyBossBaseHp;
             bossFightState.maxHp = storyBossBaseHp;
             bossFightState.phase = 1;
@@ -2400,7 +2468,7 @@
             if (bossFightState.coreOpenTimer > 0) bossFightState.coreOpenTimer--;
             if (bossFightState.coreCycleTimer > 0) bossFightState.coreCycleTimer--;
             if (bossFightState.coreCycleTimer <= 0 && bossFightState.coreOpenTimer <= 0) {
-                const storyWindowBonus = storyActive ? (storyChoices.route === 'core' ? 22 : 0) + (storyChoices.ally === 'vex' ? 34 : 0) : 0;
+                const storyWindowBonus = storyActive ? (storyChoices.route === 'core' ? 22 : 0) + (storyChoices.ally === 'vex' ? 34 : 0) + (storyChoices.field === 'vex' ? 28 : 0) : 0;
                 bossFightState.coreOpenTimer = (bossFightState.phase === 3 ? 68 : 78) + storyWindowBonus;
                 bossFightState.coreCycleTimer = bossFightState.phase === 3 ? 235 : (bossFightState.phase === 2 ? 265 : 295);
                 bossAnnounce('CORE EXPOSED — HIT IT NOW!',85);
@@ -2661,7 +2729,7 @@
             buildPlatformerWorld();
             st.vx = 0; st.vy = 0; st.facing = 1; st.jumps = 0; st.grounded = true;
             st.lives = st.maxLives = 5; st.invuln = 70; st.coinsCollected = 0; st.shardsCollected = 0;
-            st.frame = 0; st.banner = 'WELCOME TO THE LONG RUN'; st.bannerTimer = 200; st.lastSector = 1; st.finished = false;
+            st.frame = 0; st.lastUpdateTime = 0; st.banner = 'WELCOME TO THE LONG RUN'; st.bannerTimer = 200; st.lastSector = 1; st.finished = false;
             st.cameraX = 0; st.checkpointIndex = 0; st.checkpointX = 0; st.checkpointY = st.lastPlatformY;
             try {
                 const saved = JSON.parse(localStorage.getItem('redCubePlatformerCheckpoint_v2') || 'null');
@@ -2731,7 +2799,14 @@
         function updatePlatformer(elapsed) {
             const st = platformerState;
             if (!st.initialized) initPlatformerMode();
-            st.frame++;
+            // All platformer physics are authored in 60 FPS units. Scale by elapsed time
+            // so high-refresh displays do not make movement faster and low-FPS frames do
+            // not cause huge jumps. Cap catch-up to keep collision checks fair after stalls.
+            const frameNow = performance.now();
+            const frameDeltaMs = st.lastUpdateTime ? frameNow - st.lastUpdateTime : 1000 / 60;
+            const dt = st.lastUpdateTime ? (frameDeltaMs > 250 ? 1 : Math.max(0.05, Math.min(4, frameDeltaMs / (1000 / 60)))) : 1;
+            st.lastUpdateTime = frameNow;
+            st.frame += dt;
             const sector = platformerSectorAt(player.x);
             const biomeIndex = Math.min(PLATFORMER_BIOMES.length - 1, Math.floor((sector - 1) / 10));
             if (sector !== st.lastSector) {
@@ -2739,14 +2814,14 @@
                 st.banner = `SECTOR ${String(sector).padStart(3,'0')}  •  ${PLATFORMER_BIOMES[biomeIndex].name}`;
                 st.bannerTimer = 140;
             }
-            if (st.bannerTimer > 0) st.bannerTimer--;
-            if (st.invuln > 0) st.invuln--;
-            if (st.exit) st.exit.pulse += .08;
+            if (st.bannerTimer > 0) st.bannerTimer = Math.max(0, st.bannerTimer - dt);
+            if (st.invuln > 0) st.invuln = Math.max(0, st.invuln - dt);
+            if (st.exit) st.exit.pulse += .08 * dt;
 
             // Smooth horizontal control with a little air control.
             const input = (keys.d || keys.ArrowRight || keys.l ? 1 : 0) - (keys.a || keys.ArrowLeft || keys.j ? 1 : 0);
-            if (input) { st.vx += input * (st.grounded ? .58 : .39); st.facing = input; }
-            else st.vx *= st.grounded ? .78 : .94;
+            if (input) { st.vx += input * (st.grounded ? .58 : .39) * dt; st.facing = input; }
+            else st.vx *= Math.pow(st.grounded ? .78 : .94, dt);
             st.vx = Math.max(-6.3, Math.min(6.3, st.vx));
             const prevY = player.y;
             const prevBottom = player.y + player.size;
@@ -2755,14 +2830,14 @@
             // Moving platforms sweep between stable endpoints.
             for (const pl of st.platforms) {
                 if (pl.type === 'moving') {
-                    pl.phase += pl.speed;
+                    pl.phase += pl.speed * dt;
                     pl.x = pl.baseX + Math.sin(pl.phase) * pl.range;
                     pl.y = pl.baseY + Math.sin(pl.phase * .73) * 12;
                 }
             }
-            player.x = Math.max(0, Math.min(st.worldWidth - player.size, player.x + st.vx));
-            st.vy = Math.min(16, st.vy + .58);
-            player.y += st.vy;
+            player.x = Math.max(0, Math.min(st.worldWidth - player.size, player.x + st.vx * dt));
+            st.vy = Math.min(16, st.vy + .58 * dt);
+            player.y += st.vy * dt;
             st.grounded = false;
 
             // Landing detection uses the previous frame's feet so platform undersides don't catch jumps.
@@ -2777,7 +2852,7 @@
                 if (landing) {
                     player.y = landing.y - player.size;
                     st.vy = 0; st.grounded = true; st.jumps = 0;
-                    if (landing.type === 'moving') player.x += Math.cos(landing.phase) * landing.speed * landing.range;
+                    if (landing.type === 'moving') player.x += Math.cos(landing.phase) * landing.speed * landing.range * dt;
                 }
             }
 
@@ -2803,11 +2878,11 @@
             // Walkers patrol a platform. Stomp from above to defeat them; guardians require several hits.
             for (const en of st.enemies) {
                 if (!en.alive) continue;
-                en.phase += .05;
-                en.x += en.vx;
+                en.phase += .05 * dt;
+                en.x += en.vx * dt;
                 if (en.x < en.minX) { en.x = en.minX; en.vx = Math.abs(en.vx); }
                 if (en.x > en.maxX) { en.x = en.maxX; en.vx = -Math.abs(en.vx); }
-                if (en.guardian) en.y += Math.sin(en.phase) * .14;
+                if (en.guardian) en.y += Math.sin(en.phase) * .14 * dt;
                 const overlap = player.x + player.size > en.x + 3 && player.x < en.x + en.w - 3 && player.y + player.size > en.y + 3 && player.y < en.y + en.h - 2;
                 if (!overlap || st.invuln > 0) continue;
                 if (prevVy > 1.2 && prevBottom <= en.y + 16) {
@@ -2843,7 +2918,7 @@
             // Collect all credits and memory crystals within touch range.
             for (const coin of st.coins) {
                 if (coin.taken) continue;
-                coin.pulse += .08;
+                coin.pulse += .08 * dt;
                 if (Math.hypot(player.x + player.size/2 - coin.x, player.y + player.size/2 - coin.y) < player.size/2 + coin.r + 2) {
                     coin.taken = true; st.coinsCollected++; currentScore += 10;
                     createPlatformerBurst(coin.x, coin.y, '#ffd166', 5);
@@ -2851,7 +2926,7 @@
             }
             for (const shard of st.shards) {
                 if (shard.taken) continue;
-                shard.pulse += .07;
+                shard.pulse += .07 * dt;
                 if (Math.hypot(player.x + player.size/2 - shard.x, player.y + player.size/2 - shard.y) < player.size/2 + shard.r + 3) {
                     shard.taken = true; st.shardsCollected++; currentScore += 100;
                     if (st.lives < st.maxLives) st.lives++;
@@ -2861,7 +2936,7 @@
             }
 
             for (const cp of st.checkpoints) {
-                cp.pulse += .06;
+                cp.pulse += .06 * dt;
                 if (!cp.activated && player.x + player.size/2 >= cp.x) {
                     cp.activated = true; st.checkpointIndex = st.checkpoints.indexOf(cp) + 1;
                     st.checkpointX = cp.x; st.checkpointY = cp.y + 48;
@@ -2883,11 +2958,11 @@
 
             // Keep a normal particle update without running top-down combat logic.
             for (let i = particles.length - 1; i >= 0; i--) {
-                const part = particles[i]; part.x += part.vx; part.y += part.vy; part.life -= .035;
+                const part = particles[i]; part.x += part.vx * dt; part.y += part.vy * dt; part.life -= .035 * dt;
                 if (part.life <= 0) particles.splice(i, 1);
             }
             if (player.x + player.size >= st.exit.x && st.guardians.every(g => !g.alive)) finishPlatformerMode();
-            frameCount++;
+            frameCount += dt;
             if (elapsed >= 5 && !bossPlayedModes.has(selectedMode)) markModePlayedForBoss();
         }
 
@@ -4686,7 +4761,11 @@
                 ctx.fillStyle = '#ffd166'; ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'left';
                 ctx.fillText(`CHAPTER ${storyChapterIndex + 1} · ${mission.title}`, 24, 33);
                 ctx.fillStyle = '#ffffff'; ctx.font = '11px Segoe UI';
-                const goalText = mission.goal === 'orbs' ? `Energy cores: ${storyOrbCount}/${mission.target}` : mission.goal === 'kills' ? `Corrupted cubes: ${storyKillCount}/${mission.target}` : `Survive: ${Math.max(0, mission.target - elapsedStory).toFixed(1)}s remaining`;
+                const goalText = mission.goal === 'orbs' ? `Energy cores: ${storyOrbCount}/${mission.target}`
+                    : mission.goal === 'kills' ? `Corrupted cubes: ${storyKillCount}/${mission.target}`
+                    : mission.goal === 'relays' ? `Purge uplinks: ${storyRelayCount}/${mission.target}`
+                    : mission.goal === 'extract' ? (storyExitUnlocked ? 'Reach the green extraction beacon' : `Extraction unlocks in ${Math.max(0, mission.target - elapsedStory).toFixed(1)}s`)
+                    : mission.goal === 'boss' ? 'Defeat the Crimson Overlord' : `Survive: ${Math.max(0, mission.target - elapsedStory).toFixed(1)}s remaining`;
                 ctx.fillText(goalText, 24, 51);
             }
 
@@ -4793,6 +4872,7 @@
         function showMainMenu() {
             storyActive = false;
             storyCompletionTriggered = false;
+            document.getElementById('storyFieldChoice').style.display = 'none';
             document.getElementById('storyUpgradePanel').style.display = 'none';
             document.getElementById('storyDecisionPanel').style.display = 'none';
             document.getElementById('storyComms').classList.remove('active');
@@ -4982,8 +5062,8 @@
                 player.color = selectedMode === 'platformer' ? '#67edff' : '#4488ff'; player.speed = selectedMode === 'platformer' ? 5.5 : 5;
             }
             if (storyActive) {
-                player.speed = Math.min(7.2, player.speed + storyPerks.overclock * 0.55);
-                storyShieldCharges = storyPerks.aegis;
+                player.speed = Math.min(7.2, player.speed + storyPerks.overclock * 0.55 + (storyChoices.field === 'nexus' ? 0.65 : 0));
+                storyShieldCharges = storyPerks.aegis + (storyChoices.field === 'vex' ? 1 : 0);
                 storyDamageGrace = 0;
                 storyKillCount = 0;
                 storyOrbCount = 0;
